@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-CyberRemedy v4.0 — Entry point
+CyberRemedy v1.0 — Entry point
 
 Usage:
   python main.py                    # Start API + dashboard (default)
