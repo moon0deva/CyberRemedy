@@ -1,0 +1,122 @@
+{
+  "T1046": {
+    "id": "T1046",
+    "name": "Network Service Scanning",
+    "tactic": "Discovery",
+    "tactic_id": "TA0007",
+    "description": "Adversaries may attempt to get a listing of services running on remote hosts and local network infrastructure devices, including those may be vulnerable to remote exploitation.",
+    "indicators": ["high unique dst ports", "SYN packets to many ports", "FIN/NULL/XMAS scan patterns"],
+    "mitigations": ["Disable or remove unnecessary network services", "Use network segmentation", "Monitor port scanning activity"],
+    "severity": "MEDIUM"
+  },
+  "T1110": {
+    "id": "T1110",
+    "name": "Brute Force",
+    "tactic": "Credential Access",
+    "tactic_id": "TA0006",
+    "description": "Adversaries may use brute force techniques to gain access to accounts when passwords are unknown or when password hashes are obtained.",
+    "indicators": ["repeated auth failures", "high connection rate to single port", "sequential IP or user attempts"],
+    "mitigations": ["Account lockout policy", "Multi-factor authentication", "Block repeated failures via firewall"],
+    "severity": "HIGH"
+  },
+  "T1071": {
+    "id": "T1071",
+    "name": "Application Layer Protocol",
+    "tactic": "Command and Control",
+    "tactic_id": "TA0011",
+    "description": "Adversaries may communicate using OSI application layer protocols to avoid detection. Commands to the remote system may be disguised as normal expected traffic.",
+    "indicators": ["regular beacon intervals", "abnormal HTTP/DNS/HTTPS patterns", "encrypted payloads at fixed intervals"],
+    "mitigations": ["Network intrusion detection", "Filter outbound traffic", "Monitor DNS/HTTP anomalies"],
+    "severity": "HIGH"
+  },
+  "T1048": {
+    "id": "T1048",
+    "name": "Exfiltration Over Alternative Protocol",
+    "tactic": "Exfiltration",
+    "tactic_id": "TA0010",
+    "description": "Adversaries may steal data by exfiltrating it over a different protocol than that of the existing command and control channel.",
+    "indicators": ["large outbound DNS queries", "high entropy DNS payloads", "unusual data volume over DNS/ICMP"],
+    "mitigations": ["Restrict DNS to known resolvers", "Monitor data volumes on non-standard protocols", "DLP controls"],
+    "severity": "CRITICAL"
+  },
+  "T1021": {
+    "id": "T1021",
+    "name": "Remote Services",
+    "tactic": "Lateral Movement",
+    "tactic_id": "TA0008",
+    "description": "Adversaries may use valid accounts to log into a service specifically designed to accept remote connections, such as telnet, SSH, and VNC.",
+    "indicators": ["SSH/RDP connections between internal hosts", "new lateral connections after initial compromise", "internal scanning post-auth"],
+    "mitigations": ["Limit use of remote services", "Network segmentation", "Monitor lateral SSH/RDP"],
+    "severity": "HIGH"
+  },
+  "T1566": {
+    "id": "T1566",
+    "name": "Phishing",
+    "tactic": "Initial Access",
+    "tactic_id": "TA0001",
+    "description": "Adversaries may send phishing messages to gain access to victim systems. All forms of phishing are electronically delivered social engineering.",
+    "indicators": ["suspicious email attachments", "malicious link clicks", "unexpected macro execution"],
+    "mitigations": ["Anti-phishing training", "Email filtering", "Block known-malicious domains"],
+    "severity": "HIGH"
+  },
+  "T1059": {
+    "id": "T1059",
+    "name": "Command and Scripting Interpreter",
+    "tactic": "Execution",
+    "tactic_id": "TA0002",
+    "description": "Adversaries may abuse command and script interpreters to execute commands, scripts, or binaries.",
+    "indicators": ["unexpected shell spawns", "encoded command execution", "script interpreter child processes"],
+    "mitigations": ["Restrict script execution via policy", "Monitor interpreter usage", "Application whitelisting"],
+    "severity": "HIGH"
+  },
+  "T1082": {
+    "id": "T1082",
+    "name": "System Information Discovery",
+    "tactic": "Discovery",
+    "tactic_id": "TA0007",
+    "description": "An adversary may attempt to get detailed information about the operating system and hardware, including version, patches, hotfixes, service packs, and architecture.",
+    "indicators": ["OS fingerprinting probes", "banner grabbing", "TTL-based OS detection"],
+    "mitigations": ["Minimize system information exposure", "Firewall banner grabbing", "Monitor discovery commands"],
+    "severity": "MEDIUM"
+  },
+  "T1055": {
+    "id": "T1055",
+    "name": "Process Injection",
+    "tactic": "Defense Evasion",
+    "tactic_id": "TA0005",
+    "description": "Adversaries may inject code into processes in order to evade process-based defenses as well as possibly elevate privileges.",
+    "indicators": ["anomalous process memory writes", "unexpected DLL loads", "suspicious parent-child process relationships"],
+    "mitigations": ["Privileged account management", "Behavior monitoring", "Endpoint protection platform"],
+    "severity": "CRITICAL"
+  },
+  "T1105": {
+    "id": "T1105",
+    "name": "Ingress Tool Transfer",
+    "tactic": "Command and Control",
+    "tactic_id": "TA0011",
+    "description": "Adversaries may transfer tools or other files from an external system into a compromised environment.",
+    "indicators": ["large inbound transfers post-compromise", "downloads from unusual sources", "encrypted file transfers"],
+    "mitigations": ["Network monitoring for unusual inbound transfers", "Application whitelisting", "Block untrusted sources"],
+    "severity": "HIGH"
+  },
+  "T1595": {
+    "id": "T1595",
+    "name": "Active Scanning",
+    "tactic": "Reconnaissance",
+    "tactic_id": "TA0043",
+    "description": "Adversaries may execute active reconnaissance scans to gather information that can be used during targeting.",
+    "indicators": ["ICMP sweep", "massive port sweep", "service version probing"],
+    "mitigations": ["Pre-compromise network monitoring", "Firewall inbound scan blocking"],
+    "severity": "MEDIUM"
+  },
+  "T1190": {
+    "id": "T1190",
+    "name": "Exploit Public-Facing Application",
+    "tactic": "Initial Access",
+    "tactic_id": "TA0001",
+    "description": "Adversaries may attempt to take advantage of a weakness in an Internet-facing computer or program using software, data, or commands.",
+    "indicators": ["anomalous HTTP request patterns", "SQL injection signatures", "buffer overflow payloads"],
+    "mitigations": ["Patch management", "WAF deployment", "Vulnerability scanning"],
+    "severity": "CRITICAL"
+  }
+}

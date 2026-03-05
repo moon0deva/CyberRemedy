@@ -1,0 +1,221 @@
+# AID-ARS v4.0 Configuration
+# Edit here or use the Settings page in the dashboard
+
+deployment:
+  profile: laptop           # laptop | home | office | cloud
+  name: "AID-ARS Node"
+
+system:
+  interface: auto           # auto-detect, or set e.g. eth0 / wlan0
+  log_level: INFO
+  offline_mode: true
+  version: "4.0.0"
+
+network:
+  monitored_subnets: auto
+  exclude_ips: []
+  trusted_ips: []
+
+capture:
+  live_enabled: true
+  pcap_save_enabled: false   # true = save raw packets to data/pcap/
+  pcap_dir: data/pcap
+  pcap_max_file_size_mb: 500
+  pcap_max_total_gb: 20
+  pcap_retention_days: 30
+  max_packets_buffer: 10000
+  flow_timeout_seconds: 60
+  simulation_rate: 20
+
+detection:
+  signature:
+    port_scan_threshold: 15
+    brute_force_threshold: 10
+    c2_beacon_interval_ms: 30000
+    dns_entropy_threshold: 3.8
+  anomaly:
+    model_path: models/anomaly_model.pkl
+    classifier_path: models/classifier_model.pkl
+    contamination: 0.05
+    retrain_on_startup: false
+  correlation:
+    time_window_seconds: 300
+    chain_min_events: 2
+    fp_reduction: true
+
+scoring:
+  critical_threshold: 80
+  high_threshold: 60
+  medium_threshold: 40
+  low_threshold: 0
+
+response:
+  auto_block_critical: true
+  auto_block_high: false
+  auto_block_medium: false
+  dry_run: false
+  rollback_enabled: true
+  blocked_ip_ttl_seconds: 3600
+  notify_on_block: true
+
+firewall:
+  backend: auto             # auto | iptables | ufw | nftables | windows | simulation
+  enabled: true
+  dry_run: false
+  chain_name: AIDARS
+  webhook_enabled: false
+  webhook_url: ""
+  webhook_api_key: ""
+  windows_rule_prefix: "AIDARS-Block-"
+
+logging:
+  base_dir: data/logs
+  retention_days: 365
+  rotate_daily: true
+  compress_old: true
+  max_total_gb: 50
+
+assets:
+  enabled: true
+  db_path: data/assets/inventory.json
+  scan_interval_seconds: 300
+  scan_on_startup: true
+  port_scan_new_devices: true
+  port_scan_ports: [22,80,443,3389,445,21,23,3306,5432,8080,8443]
+  rogue_device_alert: true
+  labels: {}
+
+geoip:
+  enabled: true
+  high_risk_countries: ["CN","RU","KP","IR","BY","CU","SY"]
+  block_high_risk: false
+  fallback: online          # online = use ip-api.com if offline CSV not ready
+
+notifications:
+  browser_push: true
+  slack_enabled: false
+  slack_webhook: ""
+  discord_enabled: false
+  discord_webhook: ""
+  telegram_enabled: false
+  telegram_bot_token: ""
+  telegram_chat_id: ""
+  notify_severities: ["CRITICAL","HIGH"]
+
+api:
+  host: 0.0.0.0
+  port: 8000
+  cors_origins: ["*"]
+  websocket_broadcast_interval_ms: 1000
+  docs_enabled: true
+
+threat_intel:
+  enabled: true
+  db_path: data/ioc_db.json
+  virustotal_api_key: ""
+  misp_url: ""
+  misp_key: ""
+  otx_api_key: ""
+  feeds:
+    - {name: abuse_ch_feodo, url: "https://feodotracker.abuse.ch/downloads/ipblocklist.txt", type: ip, enabled: false}
+    - {name: abuse_ch_urlhaus, url: "https://urlhaus.abuse.ch/downloads/csv_recent/", type: url, enabled: false}
+  refresh_interval_hours: 6
+
+ueba:
+  enabled: true
+  learning_period_hours: 48
+  db_path: data/ueba_profiles.json
+  anomaly_threshold: 2.5
+
+cases:
+  db_path: data/cases.json
+  auto_create_for: [CRITICAL, HIGH]
+  default_sla_hours: 24
+  critical_sla_hours: 4
+
+soar:
+  enabled: true
+  db_path: data/playbooks.json
+
+yara:
+  enabled: true
+  rules_dir: data/yara_rules
+  scan_payloads: true
+
+sigma:
+  enabled: true
+  rules_dir: data/sigma_rules
+  auto_load_community: false
+
+honeypot:
+  enabled: true
+  listen_interface: "0.0.0.0"
+  services:
+    ssh:    {port: 2222, enabled: true}
+    http:   {port: 8080, enabled: true}
+    ftp:    {port: 2121, enabled: true}
+    telnet: {port: 2323, enabled: true}
+    smb:    {port: 4445, enabled: true}
+    mysql:  {port: 3307, enabled: true}
+
+compliance:
+  enabled: true
+  frameworks: [pci_dss, hipaa, nist_800_53, cis_controls]
+
+vuln:
+  enabled: true
+  nvd_api_key: ""
+  cve_db_path: data/cve_db.json
+  cvss_minimum: 4.0
+
+data_lake:
+  enabled: true
+  path: data/lake
+  format: jsonl
+  compression: true
+  retention_days: 365
+  max_size_gb: 50
+
+rbac:
+  enabled: true
+  db_path: data/users.json
+  jwt_secret: "CHANGE_ME_IN_PRODUCTION"
+  jwt_expiry_hours: 24
+  default_admin: {username: admin, password: "admin"}
+  roles:
+    admin: {permissions: ["*"]}
+    analyst: {permissions: ["read:alerts","write:cases","read:mitre","write:intel","read:ueba","write:response"]}
+    readonly: {permissions: ["read:alerts","read:cases","read:mitre","read:stats"]}
+
+forensics:
+  enabled: true
+  db_path: data/forensic_events.json
+  max_events: 100000
+  retention_days: 365
+
+reporting:
+  json_log_path: data/logs.json
+  html_report_dir: data/reports
+  blocked_ip_log: data/blocked_ips.json
+  max_log_entries: 10000
+
+syslog:
+  enabled: true
+  udp_port: 5514        # UDP syslog (rsyslog: *.* @host:5514)
+  tcp_port: 5514        # TCP syslog (rsyslog: *.* @@host:5514)
+  winlog_port: 5515     # Windows Event Log agent JSON port
+  agent_port: 5516      # AID-ARS agent telemetry port
+  max_queue: 10000
+
+notifications:
+  email:
+    enabled: false
+    smtp_host: smtp.gmail.com
+    smtp_port: 587
+    smtp_user: ""
+    smtp_password: ""   # Use Gmail App Password, not main password
+    from_addr: ""
+    to_addrs: []
+    alert_severities: ["CRITICAL", "HIGH"]
+  scheduled_reports: false
+  daily_report_hour: 8

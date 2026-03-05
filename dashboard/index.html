@@ -1,0 +1,1815 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CyberRemedy SOC PLATFORM v1.0</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#04080f;color:#c8dde8;font-family:'Segoe UI',sans-serif;overflow:hidden}
+#app{display:grid;grid-template-rows:52px 1fr;grid-template-columns:210px 1fr 290px;
+  grid-template-areas:"hdr hdr hdr" "nav main side";height:100vh}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:#060d15}::-webkit-scrollbar-thumb{background:#1a2a3a;border-radius:2px}
+#hdr{grid-area:hdr;background:#050c15;border-bottom:1px solid #0d1a26;display:flex;align-items:center;justify-content:space-between;padding:0 18px;gap:12px}
+.logo-box{width:32px;height:32px;border-radius:8px;background:rgba(0,194,255,.12);border:1px solid rgba(0,194,255,.25);display:flex;align-items:center;justify-content:center;font-size:16px}
+.hdr-stats{display:flex;gap:20px;align-items:center;flex:1;justify-content:center}
+.hdr-stat{text-align:center}.hdr-stat-val{font-size:15px;font-weight:800;font-family:monospace}.hdr-stat-lbl{font-size:8px;color:#2a4a5a;letter-spacing:1.5px}
+.pill{padding:3px 10px;border-radius:4px;font-size:9px;font-weight:700;letter-spacing:1.5px;font-family:monospace}
+.pill-green{background:rgba(48,209,88,.12);color:#30d158;border:1px solid rgba(48,209,88,.3)}
+.pill-amber{background:rgba(255,214,10,.12);color:#ffd60a;border:1px solid rgba(255,214,10,.3)}
+.pill-red{background:rgba(255,59,92,.2);color:#ff3b5c;border:1px solid rgba(255,59,92,.4)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}.pulse{animation:pulse 2s infinite}
+#nav{grid-area:nav;background:#050c15;border-right:1px solid #0d1a26;overflow-y:auto;display:flex;flex-direction:column;gap:1px;padding-top:4px}
+.nav-sec{padding:10px 14px 4px;font-size:9px;color:#1a3a4a;letter-spacing:2px;font-weight:700;font-family:monospace;text-transform:uppercase}
+.nav-item{display:flex;align-items:center;gap:8px;padding:9px 14px;font-size:11px;font-weight:600;cursor:pointer;color:#4a6a7a;transition:all .15s;border-left:2px solid transparent}
+.nav-item:hover{background:rgba(0,194,255,.06);color:#8aaabb}
+.nav-item.active{background:rgba(0,194,255,.1);color:#00c2ff;border-left-color:#00c2ff}
+.nav-badge{margin-left:auto;background:rgba(255,59,92,.2);color:#ff3b5c;border-radius:9px;padding:1px 6px;font-size:9px;font-weight:700;font-family:monospace}
+.nav-badge.g{background:rgba(48,209,88,.2);color:#30d158}
+#main{grid-area:main;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:12px}
+.page{display:none;flex-direction:column;gap:12px}.page.active{display:flex}
+#side{grid-area:side;background:#050c15;border-left:1px solid #0d1a26;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
+.panel{background:#060d15;border:1px solid #0d1a26;border-radius:8px;padding:14px;position:relative}
+.panel-title{font-size:10px;font-weight:700;color:#2a4a5a;letter-spacing:2px;text-transform:uppercase;font-family:monospace;margin-bottom:12px}
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.stat-card{background:#070e17;border:1px solid #0d1a26;border-radius:8px;padding:14px 12px}
+.stat-label{font-size:9px;color:#3a5a6a;letter-spacing:1.5px;font-family:monospace;margin-bottom:6px;text-transform:uppercase}
+.stat-val{font-size:26px;font-weight:800;font-family:monospace}
+.tbl{width:100%;border-collapse:collapse}
+.tbl th{font-size:9px;color:#2a4a5a;font-weight:700;letter-spacing:1.5px;padding:8px 10px;border-bottom:1px solid #0a1520;text-transform:uppercase;font-family:monospace;text-align:left}
+.tbl td{font-size:11px;padding:8px 10px;border-bottom:1px solid #060d14;vertical-align:middle}
+.tbl tr:hover td{background:rgba(0,194,255,.03)}
+.sev{display:inline-block;font-size:9px;padding:2px 7px;border-radius:3px;font-weight:700;letter-spacing:1px;font-family:monospace}
+.sev-CRITICAL{background:rgba(255,59,92,.13);color:#ff3b5c;border:1px solid rgba(255,59,92,.2)}
+.sev-HIGH{background:rgba(255,107,53,.12);color:#ff6b35;border:1px solid rgba(255,107,53,.2)}
+.sev-MEDIUM{background:rgba(255,214,10,.11);color:#ffd60a;border:1px solid rgba(255,214,10,.2)}
+.sev-LOW{background:rgba(48,209,88,.1);color:#30d158;border:1px solid rgba(48,209,88,.2)}
+.btn{padding:5px 12px;border-radius:5px;border:1px solid;font-size:10px;font-weight:700;cursor:pointer;letter-spacing:.5px;transition:all .15s;font-family:inherit}
+.btn-cyan{background:rgba(0,194,255,.1);border-color:rgba(0,194,255,.3);color:#00c2ff}.btn-cyan:hover{background:rgba(0,194,255,.2)}
+.btn-red{background:rgba(255,59,92,.1);border-color:rgba(255,59,92,.3);color:#ff3b5c}.btn-red:hover{background:rgba(255,59,92,.2)}
+.btn-green{background:rgba(48,209,88,.1);border-color:rgba(48,209,88,.3);color:#30d158}.btn-green:hover{background:rgba(48,209,88,.2)}
+.input{background:#070e17;border:1px solid #1a2a3a;border-radius:5px;color:#c8dde8;padding:7px 10px;font-size:11px;font-family:inherit;outline:none;width:100%}
+.input:focus{border-color:rgba(0,194,255,.4)}
+.row{display:flex;gap:8px;align-items:center}.flex1{flex:1}
+.mitre-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px}
+.mitre-cell{background:#070e17;border:1px solid #0d1a26;border-radius:6px;padding:8px}
+.mitre-cell.hit{border-color:rgba(255,59,92,.3);background:rgba(255,59,92,.06)}
+.status-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px}
+.dot-green{background:#30d158;box-shadow:0 0 6px #30d158}.dot-red{background:#ff3b5c}.dot-amber{background:#ffd60a;box-shadow:0 0 6px #ffd60a}
+
+/* Dark/Light mode */
+:root {
+  --bg-base:    #04080f;
+  --bg-panel:   #060d15;
+  --bg-nav:     #050c15;
+  --bg-input:   #070e17;
+  --border:     #0d1a26;
+  --text:       #c8dde8;
+  --text-dim:   #4a6a7a;
+  --text-dim2:  #2a4a5a;
+  --accent:     #00c2ff;
+  --accent2:    #30d158;
+  --danger:     #ff3b5c;
+  --warn:       #ffd60a;
+}
+body.light {
+  --bg-base:    #f0f4f8;
+  --bg-panel:   #ffffff;
+  --bg-nav:     #f8fafc;
+  --bg-input:   #f0f4f8;
+  --border:     #d1dde8;
+  --text:       #1a2a3a;
+  --text-dim:   #4a6a8a;
+  --text-dim2:  #8aaabb;
+  --accent:     #0070cc;
+  --accent2:    #1a8a3a;
+  --danger:     #cc0020;
+  --warn:       #cc8800;
+}
+html, body { background: var(--bg-base); color: var(--text); }
+#hdr { background: var(--bg-nav); border-bottom-color: var(--border); }
+#nav { background: var(--bg-nav); border-right-color: var(--border); }
+#side { background: var(--bg-nav); border-left-color: var(--border); }
+.panel { background: var(--bg-panel); border-color: var(--border); }
+.stat-card { background: var(--bg-input); border-color: var(--border); }
+.tbl th { border-bottom-color: var(--border); color: var(--text-dim2); }
+.tbl td { border-bottom-color: var(--border); }
+.input { background: var(--bg-input); border-color: var(--border); color: var(--text); }
+.nav-item { color: var(--text-dim); }
+.nav-item:hover { color: var(--text); }
+.nav-item.active { color: var(--accent); border-left-color: var(--accent); }
+.panel-title { color: var(--text-dim2); }
+.stat-label { color: var(--text-dim2); }
+
+/* Traffic heatmap */
+.heatmap-grid { display: grid; grid-template-columns: 40px repeat(24,1fr); gap: 2px; }
+.heatmap-cell { height: 22px; border-radius: 3px; background: var(--bg-input);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 8px; color: var(--text-dim2); transition: background .2s; cursor: default; }
+.heatmap-cell:hover { opacity: .85; }
+.hm-0  { background: var(--bg-input); }
+.hm-1  { background: rgba(0,194,255,.15); }
+.hm-2  { background: rgba(0,194,255,.3); }
+.hm-3  { background: rgba(0,194,255,.5); }
+.hm-4  { background: rgba(255,107,53,.4); }
+.hm-5  { background: rgba(255,59,92,.6); }
+/* Notification badge */
+#notif-btn { position:relative; cursor:pointer; padding:4px 8px; border-radius:6px;
+  background:rgba(0,194,255,.08); border:1px solid rgba(0,194,255,.15); font-size:14px; }
+#notif-badge { position:absolute; top:-4px; right:-4px; background:#ff3b5c; color:#fff;
+  border-radius:50%; width:15px; height:15px; font-size:8px; font-weight:800;
+  display:none; align-items:center; justify-content:center; font-family:monospace; }
+
+/* ── TOGGLE SWITCH ───────────────────────────────────────────────────────── */
+.toggle-switch { position:relative; display:inline-block; width:38px; height:20px; }
+.toggle-switch input { opacity:0; width:0; height:0; }
+.toggle-slider { position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0;
+  background:rgba(0,194,255,.25); border:1px solid rgba(0,194,255,.3);
+  border-radius:20px; transition:.25s; }
+.toggle-slider:before { position:absolute; content:""; height:14px; width:14px;
+  left:2px; bottom:2px; background:#00c2ff; border-radius:50%; transition:.25s; }
+input:checked + .toggle-slider { background:rgba(255,214,10,.2); border-color:rgba(255,214,10,.4); }
+input:checked + .toggle-slider:before { transform:translateX(18px); background:#ffd60a; }
+body.light .toggle-slider { background:rgba(0,112,204,.2); border-color:rgba(0,112,204,.3); }
+body.light .toggle-slider:before { background:#0070cc; }
+body.light input:checked + .toggle-slider { background:rgba(255,214,10,.3); }
+body.light input:checked + .toggle-slider:before { background:#cc8800; }
+
+</style>
+</head>
+<body>
+<div id="app">
+<header id="hdr">
+  <div style="display:flex;align-items:center;gap:12px">
+    <div class="logo-box">⬡</div>
+    <div><div style="font-size:13px;font-weight:800;letter-spacing:1px;color:#e8f4ff">CyberRemedy</div>
+    <div style="font-size:8px;color:#1a4a5a;letter-spacing:2px;font-family:monospace">SOC PLATFORM v1.0</div></div>
+  </div>
+  <div class="hdr-stats">
+    <div class="hdr-stat"><div class="hdr-stat-val" id="h-packets" style="color:#00c2ff">0</div><div class="hdr-stat-lbl">PACKETS</div></div>
+    <div class="hdr-stat"><div class="hdr-stat-val" id="h-flows" style="color:#30d158">0</div><div class="hdr-stat-lbl">FLOWS</div></div>
+    <div class="hdr-stat"><div class="hdr-stat-val" id="h-alerts" style="color:#ffd60a">0</div><div class="hdr-stat-lbl">ALERTS</div></div>
+    <div class="hdr-stat"><div class="hdr-stat-val" id="h-cases" style="color:#ff6b35">0</div><div class="hdr-stat-lbl">CASES</div></div>
+    <div class="hdr-stat"><div class="hdr-stat-val" id="h-blocked" style="color:#ff3b5c">0</div><div class="hdr-stat-lbl">BLOCKED</div></div>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px">
+    <div id="critical-pill" class="pill pill-red pulse" style="display:none"></div>
+    <div id="ws-pill" class="pill pill-amber">◌ CONNECTING</div>
+    <div id="clock" style="font-size:9px;color:#2a4a5a;font-family:monospace"></div>
+    <!-- DARK/LIGHT TOGGLE SWITCH -->
+    <div style="display:flex;align-items:center;gap:6px;margin-left:8px;padding-left:8px;border-left:1px solid rgba(0,194,255,.15)">
+      <span id="theme-icon" style="font-size:13px">🌙</span>
+      <label class="toggle-switch" title="Toggle Dark / Light mode">
+        <input type="checkbox" id="theme-toggle" onchange="toggleDark()">
+        <span class="toggle-slider"></span>
+      </label>
+      <span id="theme-label" style="font-size:9px;color:var(--text-dim,#2a4a5a);font-family:monospace;letter-spacing:.5px">DARK</span>
+    </div>
+    <!-- NOTIFICATION BELL -->
+    <div id="notif-btn" onclick="toggleNotifs()" title="Enable browser notifications">
+      🔔<span id="notif-badge" style="display:none;position:absolute;top:-4px;right:-4px;background:#ff3b5c;color:#fff;border-radius:50%;width:15px;height:15px;font-size:8px;font-weight:800;align-items:center;justify-content:center;"></span>
+    </div>
+  </div>
+</header>
+
+<nav id="nav">
+  <div class="nav-sec">Detection</div>
+  <div class="nav-item active" data-page="alerts" onclick="nav('alerts')">⚡ Live Alerts <span class="nav-badge" id="nb-alerts">0</span></div>
+  <div class="nav-item" data-page="chains" onclick="nav('chains')">🔗 Attack Chains <span class="nav-badge" id="nb-chains" style="display:none">0</span></div>
+  <div class="nav-item" data-page="ueba" onclick="nav('ueba')">👤 UEBA</div>
+  <div class="nav-item" data-page="honeypot" onclick="nav('honeypot')">🍯 Honeypot <span class="nav-badge" id="nb-hp" style="display:none">0</span></div>
+  <div class="nav-item" data-page="mitre" onclick="nav('mitre')">🗺 MITRE ATT&CK</div>
+  <div class="nav-sec">Response</div>
+  <div class="nav-item" data-page="cases" onclick="nav('cases')">📁 Case Manager <span class="nav-badge" id="nb-cases">0</span></div>
+  <div class="nav-item" data-page="blocked" onclick="nav('blocked')">🔒 Blocked IPs <span class="nav-badge g" id="nb-blocked">0</span></div>
+  <div class="nav-item" data-page="playbooks" onclick="nav('playbooks')">▶ SOAR Playbooks</div>
+  <div class="nav-sec">Intel &amp; Rules</div>
+  <div class="nav-item" data-page="intel" onclick="nav('intel')">🔍 Threat Intel</div>
+  <div class="nav-item" data-page="sigma" onclick="nav('sigma')">Σ Sigma Rules</div>
+  <div class="nav-item" data-page="yara" onclick="nav('yara')">🧬 YARA Rules</div>
+  <div class="nav-sec">v4.0 New</div>
+  <div class="nav-item" data-page="geomap" onclick="nav('geomap')">🌍 Geo Map</div>
+  <div class="nav-item" data-page="assets" onclick="nav('assets')">🖥 Assets <span class="nav-badge g" id="nb-assets">0</span></div>
+  <div class="nav-item" data-page="logsearch" onclick="nav('logsearch')">📂 Log Search</div>
+    <div class="nav-item" onclick="nav('syslog')">📡 Syslog / WinLog<span class="nav-badge g" id="nb-syslog">0</span></div>
+    <div class="nav-item" onclick="nav('heatmap')">🔥 Traffic Heatmap</div>
+    <div class="nav-item" onclick="nav('reports')">📊 Reports / Email</div>
+  <div class="nav-item" data-page="firewall" onclick="nav('firewall')">🔥 Firewall</div>
+  <div class="nav-item" data-page="pcap" onclick="nav('pcap')">📡 PCAP Files</div>
+  <div class="nav-item" data-page="settings" onclick="nav('settings')">⚙ Settings</div>
+  <div class="nav-sec">Platform</div>
+  <div class="nav-item" data-page="pipeline" onclick="nav('pipeline')">⚙ Pipeline</div>
+  <div class="nav-item" data-page="responses" onclick="nav('responses')">📋 Response Log</div>
+</nav>
+
+<main id="main">
+  <!-- ALERTS -->
+  <div class="page active" id="page-alerts">
+    <div class="stat-grid">
+      <div class="stat-card" style="border-top:2px solid #ff3b5c"><div class="stat-label">Critical</div><div class="stat-val" id="s-critical" style="color:#ff3b5c">0</div></div>
+      <div class="stat-card" style="border-top:2px solid #ff6b35"><div class="stat-label">High</div><div class="stat-val" id="s-high" style="color:#ff6b35">0</div></div>
+      <div class="stat-card" style="border-top:2px solid #ffd60a"><div class="stat-label">Medium</div><div class="stat-val" id="s-medium" style="color:#ffd60a">0</div></div>
+      <div class="stat-card" style="border-top:2px solid #30d158"><div class="stat-label">Low</div><div class="stat-val" id="s-low" style="color:#30d158">0</div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Traffic — Live Feed 
+  <span id="traffic-mode-badge" style="font-size:9px;font-family:monospace;padding:2px 8px;border-radius:3px;margin-left:8px;background:rgba(255,214,10,.15);color:#ffd60a;border:1px solid rgba(255,214,10,.3)">⚡ SIMULATION — connect backend for real traffic</span>
+</div>
+      <div id="traffic-bars" style="height:55px;display:flex;align-items:flex-end;gap:2px;margin-bottom:6px"></div>
+      <div style="display:flex;gap:16px;font-size:9px;color:#3a5a6a;font-family:monospace">
+        <span><span style="color:#ff3b5c">■</span> Malicious</span><span><span style="color:#30d158">■</span> Benign</span>
+        <span id="traffic-rate" style="margin-left:auto;color:#00c2ff"></span>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Live Alert Feed</div>
+      <div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Time</th><th>Severity</th><th>Type</th><th>Src IP</th><th>MITRE</th><th>Score</th><th>Actions</th></tr></thead><tbody id="alerts-tbody"></tbody></table></div>
+    </div>
+  </div>
+
+  <!-- CHAINS -->
+  <div class="page" id="page-chains">
+    <div class="panel"><div class="panel-title">Attack Chains</div><div id="chains-list"></div></div>
+  </div>
+
+  <!-- UEBA -->
+  <div class="page" id="page-ueba">
+    <div class="stat-grid" style="grid-template-columns:repeat(3,1fr)">
+      <div class="stat-card" style="border-top:2px solid #00c2ff"><div class="stat-label">Entities Tracked</div><div class="stat-val" id="ueba-entities" style="color:#00c2ff">0</div></div>
+      <div class="stat-card" style="border-top:2px solid #ffd60a"><div class="stat-label">Anomalies Today</div><div class="stat-val" id="ueba-anomalies" style="color:#ffd60a">0</div></div>
+      <div class="stat-card" style="border-top:2px solid #30d158"><div class="stat-label">Mode</div><div class="stat-val" id="ueba-mode" style="font-size:14px;padding-top:6px;color:#30d158">Learning</div></div>
+    </div>
+    <div class="panel"><div class="panel-title">Behavioral Anomalies</div>
+      <table class="tbl"><thead><tr><th>Entity</th><th>Anomaly Type</th><th>Deviation</th><th>Time</th></tr></thead><tbody id="ueba-tbody"></tbody></table>
+    </div>
+  </div>
+
+  <!-- HONEYPOT -->
+  <div class="page" id="page-honeypot">
+    <div class="stat-grid" style="grid-template-columns:repeat(3,1fr)">
+      <div class="stat-card" style="border-top:2px solid #30d158"><div class="stat-label">Services Running</div><div class="stat-val" id="hp-services" style="color:#30d158">6</div></div>
+      <div class="stat-card" style="border-top:2px solid #ff3b5c"><div class="stat-label">Total Hits</div><div class="stat-val" id="hp-hits" style="color:#ff3b5c">0</div></div>
+      <div class="stat-card" style="border-top:2px solid #ffd60a"><div class="stat-label">Connections</div><div class="stat-val" id="hp-conns" style="color:#ffd60a">0</div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Active Honeypot Services — SSH:2222 · HTTP:8080 · FTP:2121 · TELNET:2323 · SMB:4445 · MYSQL:3307</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+        <span class="pill pill-green">● SSH :2222</span><span class="pill pill-green">● HTTP :8080</span>
+        <span class="pill pill-green">● FTP :2121</span><span class="pill pill-green">● TELNET :2323</span>
+        <span class="pill pill-green">● SMB :4445</span><span class="pill pill-green">● MySQL :3307</span>
+      </div>
+      <table class="tbl"><thead><tr><th>Source IP</th><th>Service</th><th>Port</th><th>Time</th></tr></thead><tbody id="hp-tbody"></tbody></table>
+    </div>
+  </div>
+
+  <!-- MITRE -->
+  <div class="page" id="page-mitre">
+    <div class="panel"><div class="panel-title">MITRE ATT&CK Coverage — Detected Techniques</div><div id="mitre-grid" class="mitre-grid"></div></div>
+  </div>
+
+  <!-- CASES -->
+  <div class="page" id="page-cases">
+    <div class="stat-grid">
+      <div class="stat-card" style="border-top:2px solid #00c2ff"><div class="stat-label">Total Cases</div><div class="stat-val" id="cs-total" style="color:#00c2ff">0</div></div>
+      <div class="stat-card" style="border-top:2px solid #ff3b5c"><div class="stat-label">Open</div><div class="stat-val" id="cs-open" style="color:#ff3b5c">0</div></div>
+      <div class="stat-card" style="border-top:2px solid #ffd60a"><div class="stat-label">Critical Open</div><div class="stat-val" id="cs-critical" style="color:#ffd60a">0</div></div>
+      <div class="stat-card" style="border-top:2px solid #ff6b35"><div class="stat-label">SLA Breached</div><div class="stat-val" id="cs-sla" style="color:#ff6b35">0</div></div>
+    </div>
+    <div class="panel"><div class="panel-title">Cases</div>
+      <table class="tbl"><thead><tr><th>ID</th><th>Title</th><th>Severity</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead><tbody id="cases-tbody"></tbody></table>
+    </div>
+  </div>
+
+  <!-- BLOCKED -->
+  <div class="page" id="page-blocked">
+    <div class="panel"><div class="panel-title">Blocked IPs</div>
+      <table class="tbl"><thead><tr><th>IP Address</th><th>Reason</th><th>Blocked At</th><th>Action</th></tr></thead><tbody id="blocked-tbody"></tbody></table>
+    </div>
+  </div>
+
+  <!-- PLAYBOOKS -->
+  <div class="page" id="page-playbooks">
+    <div class="panel"><div class="panel-title">SOAR Playbooks</div><div id="playbooks-list"></div></div>
+    <div class="panel"><div class="panel-title">Execution History</div>
+      <table class="tbl"><thead><tr><th>Execution ID</th><th>Playbook</th><th>Status</th><th>Steps</th><th>Time</th></tr></thead><tbody id="pb-history-tbody"></tbody></table>
+    </div>
+  </div>
+
+  <!-- INTEL -->
+  <div class="page" id="page-intel">
+    <div class="stat-grid" style="grid-template-columns:repeat(3,1fr)">
+      <div class="stat-card" style="border-top:2px solid #00c2ff"><div class="stat-label">Total IOCs</div><div class="stat-val" id="ioc-total" style="color:#00c2ff">0</div></div>
+      <div class="stat-card" style="border-top:2px solid #ff3b5c"><div class="stat-label">Hits Today</div><div class="stat-val" id="ioc-hits" style="color:#ff3b5c">0</div></div>
+      <div class="stat-card" style="border-top:2px solid #ffd60a"><div class="stat-label">IP IOCs</div><div class="stat-val" id="ioc-ips" style="color:#ffd60a">0</div></div>
+    </div>
+    <div class="panel"><div class="panel-title">Add IOC</div>
+      <div class="row"><input class="input flex1" id="ioc-input" placeholder="IP / domain / hash">
+      <select class="input" id="ioc-type" style="width:100px"><option>ip</option><option>domain</option><option>hash</option></select>
+      <button class="btn btn-cyan" onclick="addIOC()">Add IOC</button></div>
+    </div>
+    <div class="panel"><div class="panel-title">IOC List</div>
+      <table class="tbl"><thead><tr><th>Indicator</th><th>Type</th><th>Source</th><th>Score</th><th>Action</th></tr></thead><tbody id="ioc-tbody"></tbody></table>
+    </div>
+  </div>
+
+  <!-- SIGMA -->
+  <div class="page" id="page-sigma">
+    <div class="panel"><div class="panel-title">Sigma Rules</div>
+      <table class="tbl"><thead><tr><th>Name</th><th>Source</th><th>Hits</th><th>Status</th></tr></thead><tbody id="sigma-tbody"></tbody></table>
+    </div>
+    <div class="panel"><div class="panel-title">Import Sigma Rule (YAML)</div>
+      <textarea class="input" id="sigma-input" rows="6" placeholder="title: My Rule&#10;logsource:&#10;  category: network&#10;detection:&#10;  ..." style="font-family:monospace;resize:vertical"></textarea>
+      <div style="margin-top:8px"><button class="btn btn-cyan" onclick="importSigma()">Import Rule</button></div>
+    </div>
+  </div>
+
+  <!-- YARA -->
+  <div class="page" id="page-yara">
+    <div class="panel"><div class="panel-title">YARA Rules</div>
+      <table class="tbl"><thead><tr><th>Rule Name</th><th>Severity</th><th>MITRE</th><th>Source</th></tr></thead><tbody id="yara-tbody"></tbody></table>
+    </div>
+    <div class="panel"><div class="panel-title">Add YARA Rule</div>
+      <input class="input" id="yara-name" placeholder="Rule name" style="margin-bottom:8px">
+      <textarea class="input" id="yara-input" rows="5" placeholder='rule MyRule {&#10;  strings: $a = "evil" ascii&#10;  condition: any of them&#10;}' style="font-family:monospace;resize:vertical"></textarea>
+      <div style="margin-top:8px"><button class="btn btn-cyan" onclick="addYara()">Add Rule</button></div>
+    </div>
+  </div>
+
+  <!-- PIPELINE -->
+  <div class="page" id="page-pipeline">
+    <div class="panel"><div class="panel-title">Pipeline Status</div><div id="pipeline-info" style="display:grid;grid-template-columns:1fr 1fr;gap:8px"></div></div>
+    <div class="panel"><div class="panel-title">Component Health</div><div id="components-info" style="display:flex;flex-direction:column;gap:6px"></div></div>
+  </div>
+
+  <!-- RESPONSES -->
+  <div class="page" id="page-responses">
+    <div class="panel"><div class="panel-title">Autonomous Response Log</div>
+      <table class="tbl"><thead><tr><th>Time</th><th>Action</th><th>Target</th><th>Detail</th><th>Result</th></tr></thead><tbody id="resp-tbody"></tbody></table>
+    </div>
+  </div>
+
+  <!-- GEO MAP -->
+  <div class="page" id="page-geomap">
+    <div class="stat-grid" style="grid-template-columns:repeat(4,1fr)">
+      <div class="stat-card" style="border-top:2px solid #00c2ff"><div class="stat-label">Countries</div><div class="stat-val" id="geo-countries" style="color:#00c2ff">0</div></div>
+      <div class="stat-card" style="border-top:2px solid #ff3b5c"><div class="stat-label">High Risk</div><div class="stat-val" id="geo-highrisk" style="color:#ff3b5c">0</div></div>
+      <div class="stat-card" style="border-top:2px solid #ffd60a"><div class="stat-label">Public IPs</div><div class="stat-val" id="geo-ips" style="color:#ffd60a">0</div></div>
+      <div class="stat-card" style="border-top:2px solid #30d158"><div class="stat-label">Private/LAN</div><div class="stat-val" id="geo-private" style="color:#30d158">0</div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">🌍 Inbound Traffic — Geographic Origin</div>
+      <div id="geo-map-container" style="background:#070e17;border-radius:6px;padding:16px;min-height:300px;position:relative;overflow:hidden">
+        <svg id="world-svg" viewBox="0 0 800 400" style="width:100%;height:280px;background:transparent">
+          <!-- Simplified world map dots -->
+          <g id="map-dots"></g>
+          <g id="alert-pins"></g>
+        </svg>
+        <div style="position:absolute;bottom:12px;left:16px;display:flex;gap:12px;font-size:9px;font-family:monospace">
+          <span><span style="color:#ff3b5c">● </span>CRITICAL</span>
+          <span><span style="color:#ff6b35">● </span>HIGH</span>
+          <span><span style="color:#ffd60a">● </span>MEDIUM</span>
+          <span><span style="color:#30d158">● </span>LOW</span>
+          <span><span style="color:#7c5cbf">◆ </span>High-risk country</span>
+        </div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="panel"><div class="panel-title">Top Source Countries</div>
+        <table class="tbl"><thead><tr><th>Flag</th><th>Country</th><th>Alerts</th><th>Risk</th></tr></thead><tbody id="geo-countries-tbody"></tbody></table>
+      </div>
+      <div class="panel"><div class="panel-title">Recent Public IPs</div>
+        <table class="tbl"><thead><tr><th>IP</th><th>Location</th><th>Org</th><th>Alerts</th></tr></thead><tbody id="geo-ips-tbody"></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ASSETS PAGE -->
+  <div class="page" id="page-assets">
+    <div class="stat-grid">
+      <div class="stat-card" style="border-top:2px solid #00c2ff"><div class="stat-label">Total Devices</div><div class="stat-val" id="as-total" style="color:#00c2ff">0</div></div>
+      <div class="stat-card" style="border-top:2px solid #30d158"><div class="stat-label">Active</div><div class="stat-val" id="as-active" style="color:#30d158">0</div></div>
+      <div class="stat-card" style="border-top:2px solid #ffd60a"><div class="stat-label">New (1h)</div><div class="stat-val" id="as-new" style="color:#ffd60a">0</div></div>
+      <div class="stat-card" style="border-top:2px solid #ff3b5c"><div class="stat-label">Rogue Alerts</div><div class="stat-val" id="as-rogue" style="color:#ff3b5c">0</div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Device Inventory <span id="scan-status" style="float:right;font-size:9px;color:#3a5a6a;font-family:monospace;line-height:2em;margin-right:8px">Auto-scan active</span>
+        <button class="btn btn-cyan" style="float:right;font-size:9px;padding:3px 10px" onclick="triggerScan()">▶ Scan Now</button></div>
+      <table class="tbl">
+        <thead><tr><th>IP</th><th>Label/Hostname</th><th>MAC / Vendor</th><th>Open Ports</th><th>First Seen</th><th>Last Seen</th><th>Actions</th></tr></thead>
+        <tbody id="assets-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- LOG SEARCH PAGE -->
+  <div class="page" id="page-logsearch">
+    <div class="panel">
+      <div class="panel-title">Log Search &amp; Export</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:8px;margin-bottom:12px">
+        <select class="input" id="log-channel"><option value="alerts">Alerts</option><option value="traffic">Traffic</option><option value="blocks">Blocks</option><option value="events">Events</option><option value="assets">Assets</option></select>
+        <input class="input" id="log-text" placeholder="Search text...">
+        <input class="input" id="log-ip" placeholder="IP address...">
+        <select class="input" id="log-hours"><option value="1">Last 1h</option><option value="6">Last 6h</option><option value="24" selected>Last 24h</option><option value="72">Last 3d</option><option value="168">Last 7d</option><option value="720">Last 30d</option></select>
+        <button class="btn btn-cyan" onclick="searchLogs()">Search</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <button class="btn btn-green" style="font-size:10px" onclick="exportLogs('csv')">↓ Export CSV</button>
+        <button class="btn btn-amber" style="font-size:10px" onclick="exportLogs('json')">↓ Export JSON</button>
+        <span id="log-count" style="font-size:10px;color:#3a5a6a;line-height:2.2em"></span>
+      </div>
+    </div>
+    <div class="panel"><div class="panel-title">Results</div>
+      <div style="overflow-x:auto"><table class="tbl"><thead><tr id="log-thead-row"></tr></thead><tbody id="log-tbody"></tbody></table></div>
+    </div>
+    <div class="panel"><div class="panel-title">Storage Statistics</div>
+      <div id="log-storage-stats" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px"></div>
+    </div>
+  </div>
+
+  <!-- FIREWALL PAGE -->
+  <div class="page" id="page-firewall">
+    <div class="stat-grid" style="grid-template-columns:repeat(4,1fr)">
+      <div class="stat-card" style="border-top:2px solid #00c2ff"><div class="stat-label">Backend</div><div class="stat-val" id="fw-backend" style="font-size:14px;padding-top:6px;color:#00c2ff">auto</div></div>
+      <div class="stat-card" style="border-top:2px solid #ff3b5c"><div class="stat-label">Active Blocks</div><div class="stat-val" id="fw-count" style="color:#ff3b5c">0</div></div>
+      <div class="stat-card" style="border-top:2px solid #30d158"><div class="stat-label">Status</div><div class="stat-val" id="fw-status" style="font-size:14px;padding-top:6px;color:#30d158">Active</div></div>
+      <div class="stat-card" style="border-top:2px solid #ffd60a"><div class="stat-label">TTL</div><div class="stat-val" id="fw-ttl" style="font-size:14px;padding-top:6px;color:#ffd60a">3600s</div></div>
+    </div>
+    <div class="panel"><div class="panel-title">Manual Block</div>
+      <div class="row">
+        <input class="input flex1" id="fw-ip-input" placeholder="IP address to block">
+        <input class="input" id="fw-reason-input" placeholder="Reason" style="width:180px">
+        <input class="input" id="fw-ttl-input" placeholder="TTL (sec, 0=perm)" style="width:120px" type="number" value="3600">
+        <button class="btn btn-red" onclick="fwBlock()">Block IP</button>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Active Firewall Blocks <button class="btn btn-red" style="float:right;font-size:9px;padding:3px 10px" onclick="fwFlush()">⚠ Flush All</button></div>
+      <table class="tbl">
+        <thead><tr><th>IP</th><th>Reason</th><th>Blocked At</th><th>Expires</th><th>Backend</th><th>Action</th></tr></thead>
+        <tbody id="fw-tbody"></tbody>
+      </table>
+    </div>
+    <div class="panel"><div class="panel-title">System Firewall Rules (read from OS)</div>
+      <div id="fw-rules-list" style="font-family:monospace;font-size:10px;color:#4a6a7a;max-height:200px;overflow-y:auto"></div>
+    </div>
+  </div>
+
+  <!-- PCAP PAGE -->
+  <div class="page" id="page-pcap">
+    <div class="stat-grid" style="grid-template-columns:repeat(3,1fr)">
+      <div class="stat-card" style="border-top:2px solid #00c2ff"><div class="stat-label">Total Files</div><div class="stat-val" id="pcap-files" style="color:#00c2ff">0</div></div>
+      <div class="stat-card" style="border-top:2px solid #ffd60a"><div class="stat-label">Total Size</div><div class="stat-val" id="pcap-size" style="font-size:18px;padding-top:6px;color:#ffd60a">0 MB</div></div>
+      <div class="stat-card" style="border-top:2px solid #30d158"><div class="stat-label">Retention</div><div class="stat-val" id="pcap-retention" style="font-size:14px;padding-top:6px;color:#30d158">30d</div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">📡 Captured PCAP Files</div>
+      <p style="font-size:11px;color:#4a6a7a;margin-bottom:12px">Raw packet captures saved when <code style="color:#00c2ff">capture.pcap_save_enabled: true</code> in settings. Open with Wireshark.</p>
+      <table class="tbl">
+        <thead><tr><th>Filename</th><th>Size</th><th>Last Modified</th><th>Action</th></tr></thead>
+        <tbody id="pcap-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- SETTINGS PAGE -->
+  <div class="page" id="page-settings">
+  <div id="restart-banner" style="display:none;background:rgba(255,214,10,.12);border:1px solid rgba(255,214,10,.3);border-radius:6px;padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between">
+  <span style="font-size:11px;color:#ffd60a">⚠️ Some changes require a server restart to fully apply.</span>
+  <button class="btn btn-cyan" onclick="restartServer()" style="font-size:10px">🔄 Restart Server</button>
+</div>
+    <div class="panel">
+      <div class="panel-title">⚙ Deployment Profile</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px" id="profile-cards"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Detection Thresholds</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px" id="threshold-settings"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Autonomous Response</div>
+      <div id="response-settings" style="display:flex;flex-direction:column;gap:10px"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Notifications</div>
+      <div id="notif-settings" style="display:flex;flex-direction:column;gap:10px"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Firewall</div>
+      <div id="fw-settings" style="display:flex;flex-direction:column;gap:10px"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">API Keys &amp; Integrations</div>
+      <div id="api-key-settings" style="display:flex;flex-direction:column;gap:10px"></div>
+    </div>
+  </div>
+
+
+  <!-- SYSLOG / WINDOWS EVENT LOG PAGE -->
+  <div class="page" id="page-syslog">
+    <div class="stat-grid" style="grid-template-columns:repeat(4,1fr)">
+      <div class="stat-card"><div class="stat-label">Total Received</div><div class="stat-val" id="sl-total">0</div></div>
+      <div class="stat-card"><div class="stat-label">Windows Events</div><div class="stat-val" id="sl-win">0</div></div>
+      <div class="stat-card"><div class="stat-label">Linux/Syslog</div><div class="stat-val" id="sl-linux">0</div></div>
+      <div class="stat-card"><div class="stat-label">Alerts Generated</div><div class="stat-val" id="sl-alerts" style="color:#ff3b5c">0</div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Syslog / Windows Event Log Ingestion</div>
+      <div style="background:#070e17;border:1px solid #1a2a3a;border-radius:6px;padding:14px;margin-bottom:10px;font-size:10px;color:#4a8a9a;font-family:monospace;line-height:1.8">
+        <b style="color:#00c2ff;font-size:11px">HOW TO SEND LOGS TO CYBERREMEDY (port 5514)</b>
+        <br><br>
+        <b style="color:#ffd60a">STEP 1 — Find your CyberRemedy server IP:</b><br>
+        &nbsp;&nbsp;<span style="color:#30d158">ip addr show | grep "inet " | grep -v 127.0.0.1</span><br>
+        &nbsp;&nbsp;Use that IP in place of <b style="color:#00c2ff">SERVER_IP</b> below.<br><br>
+
+        <b style="color:#ffd60a">OPTION A — rsyslog (Ubuntu/Debian/CentOS with rsyslog):</b><br>
+        &nbsp;&nbsp;<span style="color:#30d158">echo "*.* @@SERVER_IP:5514" | sudo tee -a /etc/rsyslog.conf</span><br>
+        &nbsp;&nbsp;<span style="color:#30d158">sudo systemctl restart rsyslog</span><br>
+        &nbsp;&nbsp;<i style="color:#3a5a6a">If rsyslog not found: sudo apt install rsyslog -y</i><br><br>
+
+        <b style="color:#ffd60a">OPTION B — syslog-ng (alternative syslog daemon):</b><br>
+        &nbsp;&nbsp;<span style="color:#30d158">sudo apt install syslog-ng -y</span><br>
+        &nbsp;&nbsp;Add to <code>/etc/syslog-ng/syslog-ng.conf</code>:<br>
+        &nbsp;&nbsp;<span style="color:#30d158">destination d_cyberremedy { tcp("SERVER_IP" port(5514)); };</span><br>
+        &nbsp;&nbsp;<span style="color:#30d158">log { source(s_src); destination(d_cyberremedy); };</span><br>
+        &nbsp;&nbsp;<span style="color:#30d158">sudo systemctl restart syslog-ng</span><br><br>
+
+        <b style="color:#ffd60a">OPTION C — logger command (built-in, test immediately):</b><br>
+        &nbsp;&nbsp;<span style="color:#30d158">logger -n SERVER_IP -P 5514 -T "Test from $(hostname)"</span><br>
+        &nbsp;&nbsp;<i style="color:#3a5a6a">Send continuously: watch -n 5 'logger -n SERVER_IP -P 5514 -T "heartbeat $(date)"'</i><br><br>
+
+        <b style="color:#ffd60a">OPTION D — Python one-liner (always works, no install):</b><br>
+        &nbsp;&nbsp;<span style="color:#30d158">python3 -c "import socket,time; s=socket.socket(); s.connect(('SERVER_IP',5514)); [s.send(b'&lt;14&gt;CyberRemedy test '+str(i).encode()+b'
+') or time.sleep(2) for i in range(999)]"</span><br><br>
+
+        <b style="color:#ffd60a">OPTION E — netcat stream (pipe any log file):</b><br>
+        &nbsp;&nbsp;<span style="color:#30d158">tail -f /var/log/syslog | nc SERVER_IP 5514</span><br>
+        &nbsp;&nbsp;<span style="color:#30d158">tail -f /var/log/auth.log | nc SERVER_IP 5514</span><br><br>
+
+        <b style="color:#ffd60a">WINDOWS — Run the included agent:</b><br>
+        &nbsp;&nbsp;<span style="color:#30d158">python agent/windows_agent.py --server SERVER_IP --port 5515</span><br><br>
+
+        <b style="color:#ffd60a">QUICK TEST — Verify CyberRemedy is receiving:</b><br>
+        &nbsp;&nbsp;<span style="color:#30d158">echo "&lt;14&gt;test message from me" | nc -u SERVER_IP 5514</span><br>
+        &nbsp;&nbsp;Then click ↺ Refresh above — the event should appear in the table.
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <input class="input flex1" id="sl-filter" placeholder="Filter messages..." oninput="renderSyslog()">
+        <select class="input" style="width:140px" id="sl-source" onchange="renderSyslog()">
+          <option value="">All Sources</option>
+          <option value="syslog">Syslog</option>
+          <option value="windows_event_log">Windows Events</option>
+        </select>
+        <button class="btn btn-cyan" onclick="loadSyslogFixed()">↺ Refresh</button>
+        <button class="btn btn-green" onclick="exportSyslog()">⬇ Export CSV</button>
+      </div>
+      <table class="tbl"><thead><tr>
+        <th>Time</th><th>Host</th><th>Source</th><th>Provider/Tag</th><th>Severity</th><th>Message</th>
+      </tr></thead>
+      <tbody id="syslog-tbl"><tr><td colspan="6" style="text-align:center;color:#2a4a5a;padding:24px">
+        Click Refresh or configure rsyslog/agent to start receiving events.
+      </td></tr></tbody></table>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Connected Agents</div>
+      <table class="tbl"><thead><tr><th>Agent IP</th><th>Type</th><th>Last Seen</th><th>Events/hr</th><th>Status</th></tr></thead>
+      <tbody id="agent-tbl"><tr><td colspan="5" style="text-align:center;color:#2a4a5a;padding:12px">No agents connected</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- TRAFFIC HEATMAP PAGE -->
+  <div class="page" id="page-heatmap">
+    <div class="panel">
+      <div class="panel-title">Traffic Heatmap — Connections by Hour of Day</div>
+      <div style="font-size:10px;color:#2a4a5a;margin-bottom:12px">Shows traffic volume per device per hour. Darker = more connections. Updates every 5 seconds.</div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <select class="input" style="width:200px" id="hm-metric" onchange="renderHeatmap()">
+          <option value="total">Total Traffic</option>
+          <option value="malicious">Malicious Only</option>
+          <option value="alerts">Alerts</option>
+        </select>
+        <button class="btn btn-cyan" onclick="loadHeatmapData()">↺ Refresh</button>
+        <div style="display:flex;gap:8px;align-items:center;font-size:10px;margin-left:auto">
+          <span style="display:inline-block;width:12px;height:12px;background:rgba(0,194,255,.1);border-radius:2px"></span>None
+          <span style="display:inline-block;width:12px;height:12px;background:rgba(0,194,255,.35);border-radius:2px"></span>Low
+          <span style="display:inline-block;width:12px;height:12px;background:rgba(0,194,255,.6);border-radius:2px"></span>Med
+          <span style="display:inline-block;width:12px;height:12px;background:rgba(255,59,92,.6);border-radius:2px"></span>High
+        </div>
+      </div>
+      <div id="heatmap-container">
+        <div class="heatmap-grid" id="heatmap-header"></div>
+        <div id="heatmap-body"><div style="text-align:center;padding:20px;color:#2a4a5a">Click Refresh to load traffic data</div></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Traffic History Chart — Benign vs Malicious</div>
+      <canvas id="traffic-chart" style="width:100%;height:160px;display:block"></canvas>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Top Talkers</div>
+      <table class="tbl"><thead><tr><th>IP / Device</th><th>Label</th><th>Events</th><th>Alerts</th><th>Last Seen</th></tr></thead>
+      <tbody id="talkers-tbl"><tr><td colspan="5" style="text-align:center;color:#2a4a5a;padding:12px">No data yet</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- REPORTS / EMAIL PAGE -->
+  <div class="page" id="page-reports">
+    <div class="stat-grid" style="grid-template-columns:repeat(4,1fr)">
+      <div class="stat-card"><div class="stat-label">Reports Generated</div><div class="stat-val" id="rpt-count">0</div></div>
+      <div class="stat-card"><div class="stat-label">Emails Sent</div><div class="stat-val" id="rpt-emails">0</div></div>
+      <div class="stat-card"><div class="stat-label">Schedule</div><div class="stat-val" style="font-size:16px;padding-top:4px" id="rpt-schedule">Off</div></div>
+      <div class="stat-card"><div class="stat-label">Next Report</div><div class="stat-val" style="font-size:14px;padding-top:4px" id="rpt-next">—</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="panel">
+        <div class="panel-title">Email Configuration (SMTP)</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <label style="font-size:10px;color:#4a6a7a">SMTP Host</label>
+          <input class="input" id="em-smtp" placeholder="smtp.gmail.com">
+          <label style="font-size:10px;color:#4a6a7a">SMTP Port</label>
+          <input class="input" id="em-port" value="587" type="number">
+          <label style="font-size:10px;color:#4a6a7a">Username</label>
+          <input class="input" id="em-user" placeholder="you@gmail.com">
+          <label style="font-size:10px;color:#4a6a7a">Password / App Password</label>
+          <input class="input" type="password" id="em-pass" placeholder="App password (not your login password)">
+          <label style="font-size:10px;color:#4a6a7a">Recipients (comma-separated)</label>
+          <input class="input" id="em-to" placeholder="soc@company.com, admin@company.com">
+          <label style="font-size:10px;color:#4a6a7a">Send alerts for:</label>
+          <div style="display:flex;gap:12px;font-size:11px">
+            <label><input type="checkbox" id="em-crit" checked> CRITICAL</label>
+            <label><input type="checkbox" id="em-high" checked> HIGH</label>
+            <label><input type="checkbox" id="em-med"> MEDIUM</label>
+          </div>
+          <button class="btn btn-cyan" onclick="saveEmailConfig()">💾 Save Email Config</button>
+          <button class="btn btn-green" onclick="testEmail()">📧 Send Test Email</button>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">Scheduled Reports</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <label style="display:flex;align-items:center;gap:8px;font-size:11px;cursor:pointer">
+            <input type="checkbox" id="sched-enabled"> Enable Daily Scheduled Reports
+          </label>
+          <label style="font-size:10px;color:#4a6a7a">Daily Report Time (0-23h)</label>
+          <input class="input" id="sched-hour" type="number" min="0" max="23" value="8">
+          <label style="font-size:10px;color:#4a6a7a">Report Format</label>
+          <select class="input" id="sched-format">
+            <option value="html">HTML Email</option>
+            <option value="json">JSON Attachment</option>
+          </select>
+          <button class="btn btn-cyan" onclick="saveReportSchedule()">💾 Save Schedule</button>
+          <button class="btn btn-green" onclick="runReportNow()">▶ Generate Report Now</button>
+          <div style="font-size:10px;color:#2a4a5a;margin-top:4px">
+            Reports saved to: <code style="color:#00c2ff">data/reports/</code>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Report History</div>
+      <table class="tbl"><thead><tr>
+        <th>Filename</th><th>Type</th><th>Size</th><th>Generated</th><th>Actions</th>
+      </tr></thead>
+      <tbody id="reports-tbl"><tr><td colspan="5" style="text-align:center;color:#2a4a5a;padding:16px">
+        No reports yet. Click "Generate Report Now" to create your first report.
+      </td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+
+<aside id="side">
+  <div class="panel"><div class="panel-title">⬡ System Status</div><div id="sys-status" style="display:flex;flex-direction:column;gap:8px;font-size:11px"></div></div>
+  <div class="panel"><div class="panel-title">🔴 Recent Responses</div><div id="side-responses" style="display:flex;flex-direction:column;gap:8px"></div></div>
+  <div class="panel"><div class="panel-title">🍯 Honeypot Activity</div><div id="side-honeypot" style="display:flex;flex-direction:column;gap:6px"></div></div>
+  <div class="panel"><div class="panel-title">🔗 Attack Chains</div><div id="side-chains" style="display:flex;flex-direction:column;gap:8px"></div></div>
+  <div class="panel"><div class="panel-title">Manual Block</div>
+    <div class="row"><input class="input flex1" id="block-input" placeholder="IP address"><button class="btn btn-red" onclick="manualBlock()">Block</button></div>
+  </div>
+</aside>
+</div>
+
+<script>
+const API='http://localhost:8000',WS_URL='ws://localhost:8000/ws';
+let ws=null,wsConnected=false;
+let alerts=[],responses=[],chains=[],blockedIPs=[],traffic=[],pipeline={},stats={};
+let cases=[],caseStats={},iocStats={},uebaAnomaly=[],uebaStats={};
+let honeypotEvts=[],honeypotStat={},playbooks=[],pbHistory=[],sigmaRules=[],yaraRules=[],iocList=[];
+let tickCount=0,currentPage='alerts';
+
+const SEVS=['CRITICAL','HIGH','MEDIUM','LOW'];
+const TYPES=['Port Scan (SYN)','SSH Brute Force','DNS Tunneling','C2 Beaconing','Lateral Movement','Data Exfiltration','YARA Match','Honeypot Connection','UEBA Anomaly','Sigma Rule Hit'];
+const MITRE_LIST=[
+  {id:'T1046',name:'Network Service Scanning',tactic:'Discovery'},
+  {id:'T1110',name:'Brute Force',tactic:'Credential Access'},
+  {id:'T1071',name:'Application Layer Protocol',tactic:'C2'},
+  {id:'T1048',name:'Exfil Over Alt Protocol',tactic:'Exfiltration'},
+  {id:'T1021',name:'Remote Services',tactic:'Lateral Movement'},
+  {id:'T1059',name:'Command Interpreter',tactic:'Execution'},
+  {id:'T1082',name:'System Info Discovery',tactic:'Discovery'},
+  {id:'T1055',name:'Process Injection',tactic:'Defense Evasion'},
+  {id:'T1486',name:'Data Encrypted for Impact',tactic:'Impact'},
+  {id:'T1566',name:'Phishing',tactic:'Initial Access'},
+  {id:'T1003',name:'OS Credential Dumping',tactic:'Credential Access'},
+  {id:'T1027',name:'Obfuscated Files',tactic:'Defense Evasion'},
+];
+let _sid=1000;
+const rnd=(a,b)=>Math.floor(Math.random()*(b-a+1))+a;
+const rip=()=>`${rnd(10,192)}.${rnd(0,255)}.${rnd(0,255)}.${rnd(1,254)}`;
+function genAlert(){
+  const m=MITRE_LIST[rnd(0,MITRE_LIST.length-1)],s=SEVS[rnd(0,3)];
+  return{id:_sid++,timestamp:new Date().toISOString(),severity:s,type:TYPES[rnd(0,TYPES.length-1)],
+    src_ip:rip(),dst_ip:rip(),dst_port:rnd(1,65535),protocol:['TCP','UDP','DNS','ICMP'][rnd(0,3)],
+    mitre_id:m.id,mitre_name:m.name,confidence:rnd(68,99),risk_score:rnd(30,95),status:'OPEN'};
+}
+
+function connectWS(){
+  try{
+    ws=new WebSocket(WS_URL);
+    ws.onopen=()=>{wsConnected=true;setWsPill(true);};
+    ws.onmessage=e=>{try{handleWSMsg(JSON.parse(e.data));}catch(_){}};
+    ws.onclose=()=>{wsConnected=false;setWsPill(false);setTimeout(connectWS,3000);};
+    ws.onerror=()=>ws.close();
+  }catch(_){setTimeout(connectWS,3000);}
+}
+function setWsPill(live){
+  const el=document.getElementById('ws-pill');
+  el.className='pill '+(live?'pill-green':'pill-amber');
+  el.textContent=live?'● LIVE':'◌ SIMULATION';
+  // Update traffic mode badge
+  const badge=document.getElementById('traffic-mode-badge');
+  if(badge){
+    if(live){
+      badge.style.background='rgba(48,209,88,.15)';
+      badge.style.color='#30d158';
+      badge.style.borderColor='rgba(48,209,88,.3)';
+      badge.textContent='● LIVE — real network traffic';
+    } else {
+      badge.style.background='rgba(255,214,10,.15)';
+      badge.style.color='#ffd60a';
+      badge.style.borderColor='rgba(255,214,10,.3)';
+      badge.textContent='⚡ SIMULATION — connect backend for real traffic';
+    }
+  }
+}
+function handleWSMsg(msg){
+  if(msg.type==='init'){
+    if(msg.recent_alerts)alerts=[...msg.recent_alerts].reverse();
+    if(msg.traffic_history)traffic=msg.traffic_history;
+    if(msg.blocked_ips)blockedIPs=msg.blocked_ips;
+    if(msg.active_chains)chains=msg.active_chains;
+    if(msg.playbooks)playbooks=msg.playbooks;
+    if(msg.sigma_rules)sigmaRules=msg.sigma_rules;
+    if(msg.yara_rules)yaraRules=msg.yara_rules;
+    loadIOCs();loadPlaybooks();loadCases();
+  }else if(msg.type==='state_update'){
+    if(msg.recent_alerts){const ids=new Set(alerts.map(a=>a.id));alerts=[...msg.recent_alerts.filter(a=>!ids.has(a.id)).reverse(),...alerts].slice(0,500);}
+    if(msg.recent_responses)responses=[...msg.recent_responses].reverse();
+    if(msg.active_chains)chains=msg.active_chains;
+    if(msg.blocked_ips)blockedIPs=msg.blocked_ips;
+    if(msg.pipeline)pipeline=msg.pipeline;
+    if(msg.traffic_point)traffic=[...traffic.slice(-59),msg.traffic_point];
+    if(msg.stats){if(msg.stats.cases)caseStats=msg.stats.cases;if(msg.stats.ioc)iocStats=msg.stats.ioc;if(msg.stats.ueba)uebaStats=msg.stats.ueba;if(msg.stats.honeypot)honeypotStat=msg.stats.honeypot;}
+    if(msg.ueba_alerts)uebaAnomaly=msg.ueba_alerts;
+    if(msg.honeypot_events)honeypotEvts=msg.honeypot_events;
+  }
+  render();
+}
+
+async function api(method,path,body){
+  try{const r=await fetch(API+path,{method,headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});return await r.json();}
+  catch(_){return null;}
+}
+async function loadCases(){const r=await api('GET','/api/cases');if(r?.cases){cases=r.cases;caseStats=r.stats||{};}render();}
+async function loadIOCs(){const r=await api('GET','/api/intel/iocs?limit=100');if(r?.iocs)iocList=r.iocs;const s=await api('GET','/api/intel/stats');if(s)iocStats=s;render();}
+async function loadPlaybooks(){const r=await api('GET','/api/playbooks');if(r?.playbooks)playbooks=r.playbooks;const h=await api('GET','/api/playbooks/history?limit=20');if(h?.history)pbHistory=h.history;render();}
+
+function sendWS(msg){if(ws?.readyState===WebSocket.OPEN)ws.send(JSON.stringify(msg));}
+function manualBlock(){const ip=document.getElementById('block-input').value.trim();if(!ip)return;sendWS({cmd:'manual_block',ip});blockedIPs=[{ip,reason:'Manual',blocked_at:new Date().toISOString()},...blockedIPs];document.getElementById('block-input').value='';render();}
+function unblockIP(ip){sendWS({cmd:'manual_unblock',ip});blockedIPs=blockedIPs.filter(b=>b.ip!==ip);render();}
+function blockAlert(id){const a=alerts.find(x=>x.id===id);if(!a)return;sendWS({cmd:'manual_block',ip:a.src_ip});alerts=alerts.map(x=>x.id===id?{...x,status:'BLOCKED'}:x);blockedIPs=[{ip:a.src_ip,reason:a.type,blocked_at:new Date().toISOString()},...blockedIPs];render();}
+function createCase(id){api('POST','/api/cases/from-alert/'+id).then(r=>{if(r?.case){cases=[r.case,...cases];render();}});}
+function transitionCase(caseId,status){api('PATCH',`/api/cases/${caseId}/status`,{status}).then(()=>loadCases());}
+function addIOC(){const v=document.getElementById('ioc-input').value.trim(),t=document.getElementById('ioc-type').value;if(!v)return;api('POST','/api/intel/iocs',{indicator:v,ioc_type:t,source:'manual',score:80}).then(()=>loadIOCs());document.getElementById('ioc-input').value='';}
+function deleteIOC(indicator){api('DELETE',`/api/intel/iocs/${encodeURIComponent(indicator)}`).then(()=>loadIOCs());}
+function importSigma(){const y=document.getElementById('sigma-input').value.trim();if(!y)return;api('POST','/api/sigma/import',{yaml_content:y,source:'manual'}).then(r=>{if(r?.result?.imported)sigmaRules=[...sigmaRules,{name:r.result.title||'Imported',source:'manual',hits:0}];render();});document.getElementById('sigma-input').value='';}
+function addYara(){const n=document.getElementById('yara-name').value.trim(),r=document.getElementById('yara-input').value.trim();if(!n||!r)return;api('POST','/api/yara/rules',{name:n,rule_text:r}).then(()=>{yaraRules=[...yaraRules,{name:n,source:'user',severity:'MEDIUM',mitre_id:''}];render();});document.getElementById('yara-name').value='';document.getElementById('yara-input').value='';}
+
+function runSim(){
+  tickCount++;
+  if(tickCount%3===0){
+    const a=genAlert();alerts=[a,...alerts].slice(0,300);
+    traffic=[...traffic.slice(-59),{t:tickCount,benign:rnd(300,1200),malicious:rnd(5,150),total:rnd(600,1800)}];
+    if(a.severity==='CRITICAL'&&Math.random()>.6){
+      responses=[{action_type:'BLOCK_IP',target_ip:a.src_ip,detail:'Auto-blocked: '+a.type,timestamp:a.timestamp,success:true},...responses].slice(0,50);
+      honeypotEvts=[{src_ip:a.src_ip,service:['SSH','HTTP','FTP'][rnd(0,2)],port:rnd(2000,9000),ts:a.timestamp},...honeypotEvts].slice(0,30);
+    }
+    if(tickCount%18===0&&alerts.length>3){
+      chains=[{chain_id:'CHN-'+tickCount,src_ip:alerts[0].src_ip,alert_count:rnd(3,8),stages:['Recon','Exploit','C2'],first_seen:alerts[2]?.timestamp,last_seen:alerts[0].timestamp},...chains].slice(0,10);
+    }
+  }
+  const bk={};alerts.forEach(a=>{bk[a.severity]=(bk[a.severity]||0)+1;});
+  stats={total_alerts:alerts.length,severity_breakdown:bk};
+  pipeline={running:wsConnected,mode:wsConnected?'live':'simulation',alerts_total:alerts.length,flows_analyzed:alerts.length*3,packets_processed:alerts.length*15,version:'3.0.0'};
+  if(!wsConnected){caseStats={total:cases.length,open:cases.filter(c=>c.status==='OPEN').length,critical_open:cases.filter(c=>c.status==='OPEN'&&c.severity==='CRITICAL').length,sla_breached:0};honeypotStat={services_running:6,total_hits:honeypotEvts.length,total_connections:honeypotEvts.length};uebaStats={entities_tracked:rnd(5,20),anomalies_today:uebaAnomaly.length};}
+  render();
+}
+
+const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const fmt=ts=>{if(!ts)return'--';try{return new Date(ts).toLocaleTimeString();}catch(_){return'--';}};
+const sev=s=>`<span class="sev sev-${s}">${s}</span>`;
+const empty=(cols,msg)=>`<tr><td colspan="${cols}" style="color:#3a5a6a;text-align:center;padding:20px">${msg}</td></tr>`;
+
+function render(){
+  // Header
+  document.getElementById('h-packets').textContent=(pipeline.packets_processed||0).toLocaleString();
+  document.getElementById('h-flows').textContent=(pipeline.flows_analyzed||0).toLocaleString();
+  document.getElementById('h-alerts').textContent=alerts.length.toLocaleString();
+  document.getElementById('h-cases').textContent=(caseStats.total||cases.length||0).toLocaleString();
+  document.getElementById('h-blocked').textContent=blockedIPs.length.toLocaleString();
+
+  const open=alerts.filter(a=>a.status!=='BLOCKED');
+  document.getElementById('nb-alerts').textContent=open.length;
+  const nbC=document.getElementById('nb-chains');nbC.textContent=chains.length;nbC.style.display=chains.length?'':'none';
+  const nbH=document.getElementById('nb-hp');nbH.textContent=honeypotEvts.length;nbH.style.display=honeypotEvts.length?'':'none';
+  document.getElementById('nb-cases').textContent=caseStats.open||cases.filter(c=>c.status==='OPEN').length||0;
+  document.getElementById('nb-blocked').textContent=blockedIPs.length;
+
+  const crit=open.filter(a=>a.severity==='CRITICAL').length;
+  const cp=document.getElementById('critical-pill');cp.style.display=crit>0?'':'none';if(crit>0)cp.textContent=`⚠ ${crit} CRITICAL`;
+
+  const bk=stats.severity_breakdown||{};
+  ['CRITICAL','HIGH','MEDIUM','LOW'].forEach(s=>{const el=document.getElementById('s-'+s.toLowerCase());if(el)el.textContent=bk[s]||0;});
+
+  // Traffic bars
+  const bars=document.getElementById('traffic-bars');
+  if(bars&&traffic.length){
+    const maxT=Math.max(...traffic.map(t=>t.total||1),1);
+    bars.innerHTML=traffic.slice(-50).map(t=>{
+      const mh=Math.round(((t.malicious||0)/maxT)*52);const bh=Math.round(((t.benign||0)/maxT)*52);
+      return`<div style="flex:1;display:flex;flex-direction:column;align-items:stretch;justify-content:flex-end;height:52px;gap:1px"><div style="background:#ff3b5c55;height:${mh}px;border-radius:1px 1px 0 0"></div><div style="background:#30d15855;height:${bh}px;border-radius:1px 1px 0 0"></div></div>`;
+    }).join('');
+    const last=traffic[traffic.length-1];document.getElementById('traffic-rate').textContent=last?`${last.total||0}/s`:'';
+  }
+
+  // Alerts table
+  const atbody=document.getElementById('alerts-tbody');
+  if(atbody)atbody.innerHTML=alerts.length?alerts.slice(0,50).map(a=>`<tr>
+    <td style="color:#3a5a6a;font-family:monospace;font-size:9px">${fmt(a.timestamp)}</td>
+    <td>${sev(a.severity)}</td>
+    <td style="color:#8aaabb;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.type)}</td>
+    <td style="font-family:monospace;font-size:10px;color:#00c2ff">${esc(a.src_ip)}</td>
+    <td style="font-family:monospace;font-size:9px;color:#7c5cbf">${esc(a.mitre_id||'')}</td>
+    <td style="font-family:monospace;color:${a.risk_score>70?'#ff3b5c':a.risk_score>40?'#ffd60a':'#30d158'}">${a.risk_score||0}</td>
+    <td>${a.status==='BLOCKED'?'<span style="font-size:9px;color:#3a5a6a">BLOCKED</span>':`<button class="btn btn-red" style="font-size:9px;padding:3px 7px" onclick="blockAlert(${a.id})">Block</button> <button class="btn btn-cyan" style="font-size:9px;padding:3px 7px;margin-left:3px" onclick="createCase(${a.id})">Case</button>`}</td>
+  </tr>`).join(''):empty(7,'Waiting for alerts...');
+
+  // Chains
+  const cl=document.getElementById('chains-list');
+  if(cl)cl.innerHTML=chains.length?chains.map(c=>`<div style="background:#070e17;border:1px solid #0d1a26;border-radius:6px;padding:12px;margin-bottom:8px"><div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-family:monospace;color:#00c2ff;font-weight:700">${esc(c.chain_id||c.id||'CHN')}</span><span style="font-size:9px;color:#ff3b5c">${c.alert_count||0} alerts</span></div><div style="font-size:10px;color:#4a6a7a">Source: <span style="color:#8aaabb;font-family:monospace">${esc(c.src_ip||'?')}</span></div>${c.stages?`<div style="margin-top:6px;display:flex;gap:6px">${c.stages.map(s=>`<span style="font-size:9px;padding:2px 8px;background:rgba(0,194,255,.08);border:1px solid rgba(0,194,255,.15);border-radius:3px;color:#00c2ff">${esc(s)}</span>`).join('')}</div>`:''}</div>`).join(''):'<div style="color:#3a5a6a;padding:20px;text-align:center;font-size:12px">No attack chains yet. Chains form automatically as alerts correlate.</div>';
+
+  // UEBA
+  document.getElementById('ueba-entities').textContent=uebaStats.entities_tracked||0;
+  document.getElementById('ueba-anomalies').textContent=uebaStats.anomalies_today||0;
+  document.getElementById('ueba-mode').textContent=uebaStats.learning===false?'Active':'Learning';
+  const utbody=document.getElementById('ueba-tbody');
+  if(utbody)utbody.innerHTML=uebaAnomaly.length?uebaAnomaly.map(a=>`<tr><td style="font-family:monospace;color:#00c2ff">${esc(a.entity||a.entity_id||'?')}</td><td style="color:#ffd60a">${esc(a.type||a.anomaly_type||'Anomaly')}</td><td style="font-family:monospace;color:#ff6b35">${typeof(a.deviation||a.score)=='number'?(a.deviation||a.score).toFixed(1)+'σ':esc(a.deviation)}</td><td style="font-family:monospace;font-size:9px;color:#3a5a6a">${fmt(a.ts||a.timestamp)}</td></tr>`).join(''):empty(4,'No behavioral anomalies detected yet.');
+
+  // Honeypot
+  document.getElementById('hp-services').textContent=honeypotStat.services_running||6;
+  document.getElementById('hp-hits').textContent=honeypotStat.total_hits||0;
+  document.getElementById('hp-conns').textContent=honeypotStat.total_connections||0;
+  const htbody=document.getElementById('hp-tbody');
+  if(htbody)htbody.innerHTML=honeypotEvts.length?honeypotEvts.slice(0,30).map(e=>`<tr><td style="font-family:monospace;color:#ff3b5c">${esc(e.src_ip)}</td><td style="color:#ffd60a">${esc(e.service||'?')}</td><td style="font-family:monospace;color:#4a6a7a">${e.port||''}</td><td style="font-family:monospace;font-size:9px;color:#3a5a6a">${fmt(e.ts||e.timestamp)}</td></tr>`).join(''):empty(4,'No honeypot connections yet. Try: telnet localhost 2323');
+
+  // MITRE
+  const mg=document.getElementById('mitre-grid');
+  if(mg){const det=new Set(alerts.map(a=>a.mitre_id));mg.innerHTML=MITRE_LIST.map(m=>`<div class="mitre-cell${det.has(m.id)?' hit':''}"><div style="font-family:monospace;color:${det.has(m.id)?'#ff3b5c':'#00c2ff'};font-size:9px;font-weight:700">${m.id}${det.has(m.id)?' ●':''}</div><div style="color:#8aaabb;margin-top:2px;font-size:9px">${m.name}</div><div style="font-size:8px;color:#3a5a6a;margin-top:3px">${m.tactic}</div></div>`).join('');}
+
+  // Cases
+  document.getElementById('cs-total').textContent=caseStats.total||cases.length||0;
+  document.getElementById('cs-open').textContent=caseStats.open||cases.filter(c=>c.status==='OPEN').length||0;
+  document.getElementById('cs-critical').textContent=caseStats.critical_open||0;
+  document.getElementById('cs-sla').textContent=caseStats.sla_breached||0;
+  const SC={OPEN:'#ff3b5c',INVESTIGATING:'#ffd60a',RESOLVED:'#30d158',CLOSED:'#4a6a7a',FALSE_POSITIVE:'#7c5cbf'};
+  const ctbody=document.getElementById('cases-tbody');
+  if(ctbody)ctbody.innerHTML=cases.length?cases.slice(0,30).map(c=>`<tr><td style="font-family:monospace;font-size:9px;color:#00c2ff">${esc(c.id)}</td><td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#8aaabb">${esc(c.title)}</td><td>${sev(c.severity||'MEDIUM')}</td><td style="font-size:9px;font-family:monospace;color:${SC[c.status]||'#8aaabb'}">${esc(c.status)}</td><td style="font-size:9px;color:#3a5a6a;font-family:monospace">${fmt(c.created_at)}</td><td>${c.status!=='RESOLVED'?`<button class="btn btn-green" style="font-size:9px;padding:3px 7px" onclick="transitionCase('${esc(c.id)}','RESOLVED')">Resolve</button>`:''}</td></tr>`).join(''):empty(6,'No cases. Cases auto-create for CRITICAL/HIGH alerts, or click "Case" on any alert.');
+
+  // Blocked
+  const btbody=document.getElementById('blocked-tbody');
+  if(btbody)btbody.innerHTML=blockedIPs.length?blockedIPs.slice(0,50).map(b=>`<tr><td style="font-family:monospace;color:#ff3b5c">${esc(b.ip)}</td><td style="color:#8aaabb">${esc(b.reason||'?')}</td><td style="font-size:9px;color:#3a5a6a;font-family:monospace">${fmt(b.blocked_at)}</td><td><button class="btn btn-green" style="font-size:9px;padding:3px 7px" onclick="unblockIP('${esc(b.ip)}')">Unblock</button></td></tr>`).join(''):empty(4,'No IPs blocked.');
+
+  // Playbooks
+  const pl=document.getElementById('playbooks-list');
+  if(pl)pl.innerHTML=playbooks.length?playbooks.map(p=>`<div style="background:#070e17;border:1px solid #0d1a26;border-radius:6px;padding:12px;margin-bottom:8px;display:flex;align-items:center;gap:12px"><div style="flex:1"><div style="font-weight:700;color:#e8f4ff;font-size:12px">${esc(p.name||p.playbook_id)}</div><div style="font-size:10px;color:#3a5a6a;margin-top:3px">${esc(p.description||'')} · Runs: ${p.execution_count||0}</div></div><span style="font-size:9px;padding:2px 8px;border-radius:3px;${p.enabled!==false?'background:rgba(48,209,88,.12);color:#30d158;border:1px solid rgba(48,209,88,.2)':'background:rgba(255,59,92,.1);color:#ff3b5c;border:1px solid rgba(255,59,92,.2)'}">${p.enabled!==false?'ENABLED':'DISABLED'}</span></div>`).join(''):'<div style="color:#3a5a6a;padding:16px;text-align:center">Loading playbooks...</div>';
+  const phtbody=document.getElementById('pb-history-tbody');
+  if(phtbody)phtbody.innerHTML=pbHistory.length?pbHistory.slice(0,20).map(h=>`<tr><td style="font-family:monospace;font-size:9px;color:#00c2ff">${esc(h.execution_id)}</td><td style="color:#8aaabb">${esc(h.playbook_name||h.playbook_id)}</td><td style="font-family:monospace;font-size:9px;color:${h.status==='COMPLETED'?'#30d158':h.status==='FAILED'?'#ff3b5c':'#ffd60a'}">${esc(h.status)}</td><td style="font-family:monospace;font-size:9px;color:#4a6a7a">${h.steps_completed||0}</td><td style="font-family:monospace;font-size:9px;color:#3a5a6a">${fmt(h.started_at)}</td></tr>`).join(''):empty(5,'No executions yet.');
+
+  // IOC
+  document.getElementById('ioc-total').textContent=iocStats.total_iocs||iocList.length||0;
+  document.getElementById('ioc-hits').textContent=iocStats.hits_today||0;
+  document.getElementById('ioc-ips').textContent=iocStats.total_ip_iocs||iocList.filter(i=>i.ioc_type==='ip').length||0;
+  const itbody=document.getElementById('ioc-tbody');
+  if(itbody)itbody.innerHTML=iocList.length?iocList.slice(0,30).map(i=>`<tr><td style="font-family:monospace;color:#00c2ff">${esc(i.value||i.indicator)}</td><td style="color:#4a6a7a">${esc(i.ioc_type||i.type||'ip')}</td><td style="color:#8aaabb">${esc(i.source||'manual')}</td><td style="font-family:monospace;color:${(i.score||0)>70?'#ff3b5c':'#ffd60a'}">${i.score||75}</td><td><button class="btn btn-red" style="font-size:9px;padding:3px 7px" onclick="deleteIOC('${esc(i.value||i.indicator)}')">Remove</button></td></tr>`).join(''):empty(5,'No IOCs yet. Add an IP to start matching.');
+
+  // Sigma
+  const stbody=document.getElementById('sigma-tbody');
+  if(stbody)stbody.innerHTML=sigmaRules.length?sigmaRules.slice(0,20).map(r=>`<tr><td style="color:#e8f4ff">${esc(r.name||r.title||r.id)}</td><td style="color:#4a6a7a">${esc(r.source||'builtin')}</td><td style="font-family:monospace;color:${(r.hits||0)>0?'#ff3b5c':'#3a5a6a'}">${r.hits||0}</td><td><span style="font-size:9px;color:#30d158">● ACTIVE</span></td></tr>`).join(''):empty(4,'Loading...');
+
+  // YARA
+  const ytbody=document.getElementById('yara-tbody');
+  if(ytbody)ytbody.innerHTML=yaraRules.length?yaraRules.slice(0,20).map(r=>`<tr><td style="color:#e8f4ff">${esc(r.name||r.rule_name)}</td><td>${sev(r.severity||'HIGH')}</td><td style="font-family:monospace;color:#7c5cbf">${esc(r.mitre_id||r.mitre||'')}</td><td style="color:#4a6a7a">${esc(r.source||'builtin')}</td></tr>`).join(''):empty(4,'Loading...');
+
+  // Pipeline
+  const pi=document.getElementById('pipeline-info');
+  if(pi)pi.innerHTML=[['Mode',pipeline.mode||'simulation'],['Status',pipeline.running?'● Running':'◌ Stopped'],['Packets',(pipeline.packets_processed||0).toLocaleString()],['Flows',(pipeline.flows_analyzed||0).toLocaleString()],['Alerts',(pipeline.alerts_total||0).toLocaleString()],['Version',pipeline.version||'3.0.0']].map(([k,v])=>`<div style="background:#070e17;border:1px solid #0d1a26;border-radius:6px;padding:10px"><div style="font-size:9px;color:#3a5a6a;font-family:monospace;margin-bottom:4px">${k.toUpperCase()}</div><div style="font-size:13px;font-weight:700;color:#e8f4ff;font-family:monospace">${esc(v)}</div></div>`).join('');
+  const ci=document.getElementById('components-info');
+  if(ci)ci.innerHTML=[['Signature Detector','ready','dot-green'],['Anomaly Detector','heuristic','dot-amber'],['Correlation Engine','ready','dot-green'],['SOAR Playbooks',`${playbooks.length} loaded`,'dot-green'],['YARA Engine',`${yaraRules.length} rules`,'dot-green'],['Sigma Engine',`${sigmaRules.length} rules`,'dot-green'],['Honeypot','6 services','dot-green'],['WebSocket',wsConnected?'Connected':'Simulation',wsConnected?'dot-green':'dot-amber']].map(([k,v,d])=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #0a1520"><span style="color:#4a6a7a;font-size:10px"><span class="status-dot ${d}"></span>${k}</span><span style="font-family:monospace;font-size:9px;color:#8aaabb">${v}</span></div>`).join('');
+
+  // Responses
+  const rtbody=document.getElementById('resp-tbody');
+  if(rtbody)rtbody.innerHTML=responses.length?responses.slice(0,30).map(r=>`<tr><td style="font-family:monospace;font-size:9px;color:#3a5a6a">${fmt(r.timestamp)}</td><td style="color:#00c2ff;font-family:monospace;font-size:10px">${esc(r.action_type||r.action||'?')}</td><td style="font-family:monospace;color:#ff3b5c">${esc(r.target_ip||r.ip||'')}</td><td style="color:#8aaabb;font-size:10px">${esc(r.detail||r.reason||'')}</td><td><span style="font-size:9px;color:${r.success?'#30d158':'#ff3b5c'}">${r.success?'✓ OK':'✗'}</span></td></tr>`).join(''):empty(5,'No autonomous responses yet.');
+
+  // Side panel
+  const ss=document.getElementById('sys-status');
+  if(ss)ss.innerHTML=[['Sig Detector','ready','dot-green'],['Anomaly Detector','heuristic','dot-amber'],['Correlation','ready','dot-green'],['Playbooks',`${playbooks.length}`,'dot-green'],['YARA',`${yaraRules.length} rules`,'dot-green'],['Sigma',`${sigmaRules.length} rules`,'dot-green'],['Honeypot','6 services','dot-green'],['WebSocket',wsConnected?'Live':'Simulation',wsConnected?'dot-green':'dot-amber']].map(([k,v,d])=>`<div style="display:flex;justify-content:space-between;align-items:center"><span style="color:#4a6a7a;font-size:10px"><span class="status-dot ${d}"></span>${k}</span><span style="font-family:monospace;font-size:9px;color:#8aaabb">${v}</span></div>`).join('');
+
+  const sr=document.getElementById('side-responses');
+  if(sr)sr.innerHTML=responses.slice(0,4).map(r=>`<div style="font-size:10px;padding:6px;background:#070e17;border-radius:5px;border:1px solid #0d1a26"><div style="color:#00c2ff;font-family:monospace">${esc(r.action_type||'ACTION')}</div><div style="color:#3a5a6a;margin-top:2px">${esc(r.target_ip||'')} · ${fmt(r.timestamp)}</div></div>`).join('')||'<div style="color:#3a5a6a;font-size:10px">No actions yet</div>';
+
+  const sh=document.getElementById('side-honeypot');
+  if(sh)sh.innerHTML=honeypotEvts.slice(0,4).map(e=>`<div style="font-size:10px;display:flex;justify-content:space-between"><span style="font-family:monospace;color:#ff3b5c">${esc(e.src_ip)}</span><span style="color:#ffd60a">${esc(e.service||'?')}</span><span style="color:#3a5a6a;font-family:monospace;font-size:9px">${fmt(e.ts||e.timestamp)}</span></div>`).join('')||'<div style="color:#3a5a6a;font-size:10px">No connections yet</div>';
+
+  const sc=document.getElementById('side-chains');
+  if(sc)sc.innerHTML=chains.slice(0,4).map(c=>`<div style="font-size:10px;padding:6px;background:#070e17;border-radius:5px;border:1px solid rgba(255,59,92,.15)"><div style="font-family:monospace;color:#ff3b5c">${esc(c.chain_id||c.id)}</div><div style="color:#4a6a7a;margin-top:2px">${c.alert_count||0} alerts · ${esc(c.src_ip||'?')}</div></div>`).join('')||'<div style="color:#3a5a6a;font-size:10px">No chains yet</div>';
+}
+
+function nav(page){
+  currentPage=page;
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>{n.classList.remove('active');if(n.dataset.page===page)n.classList.add('active');});
+  const el=document.getElementById('page-'+page);if(el)el.classList.add('active');
+  if(page==='cases')loadCases();
+  if(page==='intel')loadIOCs();
+  if(page==='playbooks')loadPlaybooks();
+}
+
+setInterval(()=>{document.getElementById('clock').textContent=new Date().toLocaleTimeString();},1000);
+
+// Seed initial data
+alerts=Array.from({length:20},genAlert);
+traffic=Array.from({length:40},(_,i)=>({t:i,benign:rnd(300,1200),malicious:rnd(5,150),total:rnd(600,1800)}));
+honeypotEvts=[{src_ip:'203.0.113.42',service:'SSH',port:2222,ts:new Date().toISOString()}];
+uebaAnomaly=[{entity:'10.0.0.5',type:'Off-hours access',deviation:3.2,ts:new Date().toISOString()},{entity:'192.168.1.100',type:'Port sweep anomaly',deviation:4.7,ts:new Date().toISOString()}];
+
+render();
+connectWS();
+setInterval(runSim,1000);
+
+// Load real API data
+Promise.all([api('GET','/api/sigma/rules'),api('GET','/api/yara/rules'),api('GET','/api/playbooks')]).then(([sig,yar,pb])=>{
+  if(sig?.rules)sigmaRules=sig.rules;
+  if(yar?.rules)yaraRules=yar.rules;
+  if(pb?.playbooks)playbooks=pb.playbooks;
+  render();
+});
+loadCases();loadIOCs();
+
+// ─── v4.0 STATE ───────────────────────────────────────────────────────────────
+let geoPoints=[], geoCountries=[], assetList=[], logResults=[], fwBlocked=[], fwRules=[];
+let pcapFiles=[], appConfig={}, logStorageStats={};
+let rogueAlertCount=0;
+
+// ─── v4.0 API CALLS ───────────────────────────────────────────────────────────
+async function loadGeoMap(){
+  const r=await api('GET','/api/map');
+  if(!r)return;
+  geoPoints=r.points||[];geoCountries=r.country_stats||[];
+  renderGeoMap();renderGeoCountries();
+}
+async function loadAssets(){
+  const r=await api('GET','/api/assets');
+  if(r?.assets){assetList=r.assets;document.getElementById('nb-assets').textContent=assetList.length;}
+  renderAssets();
+}
+async function triggerScan(){
+  const btn = document.querySelector('[onclick="triggerScan()"]');
+  const status = document.getElementById('scan-status');
+  if(btn){ btn.disabled=true; btn.textContent='⏳ Scanning...'; }
+  if(status) status.textContent = 'Scanning network...';
+  await api('POST','/api/assets/scan');
+  showToast('Network scan started — results in ~30 seconds','green');
+  // Poll for results
+  let attempts = 0;
+  const poll = setInterval(async () => {
+    attempts++;
+    await loadAssets();
+    const count = document.getElementById('as-total')?.textContent || '0';
+    if(parseInt(count) > 0 || attempts > 12){
+      clearInterval(poll);
+      if(btn){ btn.disabled=false; btn.textContent='▶ Scan Now'; }
+      if(status) status.textContent = `Last scan: ${new Date().toLocaleTimeString()}`;
+    }
+  }, 5000);
+}
+async function labelAsset(ip){
+  const label=prompt('Enter a friendly name for '+ip+':');
+  if(!label)return;
+  await api('POST','/api/assets/label',{ip,label});
+  loadAssets();
+}
+async function searchLogs(){
+  const ch=document.getElementById('log-channel').value;
+  const text=document.getElementById('log-text').value;
+  const ip=document.getElementById('log-ip').value;
+  const hours=parseInt(document.getElementById('log-hours').value);
+  const params=new URLSearchParams({text,ip,since_hours:hours,limit:500});
+  if(ch)params.set('severity','');
+  const r=await api('GET',`/api/logs/${ch}?${params}`);
+  logResults=r?.records||[];
+  document.getElementById('log-count').textContent=`${logResults.length} records`;
+  renderLogs();
+  loadLogStats();
+}
+async function loadLogStats(){
+  const r=await api('GET','/api/logs/stats');
+  if(r)logStorageStats=r;renderLogStats();
+}
+function exportLogs(fmt){
+  const ch=document.getElementById('log-channel').value;
+  const hours=document.getElementById('log-hours').value;
+  window.open(`${API}/api/logs/${ch}/export?since_hours=${hours}&fmt=${fmt}`,'_blank');
+}
+async function loadFirewall(){
+  const [status,blocked,rules]=await Promise.all([
+    api('GET','/api/firewall/status'),
+    api('GET','/api/firewall/blocked'),
+    api('GET','/api/firewall/rules'),
+  ]);
+  if(status){document.getElementById('fw-backend').textContent=status.backend||'auto';document.getElementById('fw-count').textContent=status.blocked_count||0;document.getElementById('fw-ttl').textContent=(status.ttl_seconds||3600)+'s';}
+  fwBlocked=blocked?.blocked||[];fwRules=rules?.rules||[];
+  renderFirewall();
+}
+async function fwBlock(){
+  const ip=document.getElementById('fw-ip-input').value.trim();
+  const reason=document.getElementById('fw-reason-input').value.trim()||'manual';
+  const ttl=parseInt(document.getElementById('fw-ttl-input').value)||3600;
+  if(!ip)return;
+  await api('POST','/api/firewall/block',{ip,reason,ttl});
+  document.getElementById('fw-ip-input').value='';
+  loadFirewall();
+}
+async function fwUnblock(ip){
+  await api('DELETE',`/api/firewall/block/${encodeURIComponent(ip)}`);
+  loadFirewall();
+}
+async function fwFlush(){
+  if(!confirm('Flush ALL firewall rules?'))return;
+  await api('POST','/api/firewall/flush');loadFirewall();
+}
+async function loadPcap(){
+  const [list,stats]=await Promise.all([api('GET','/api/pcap/list'),api('GET','/api/pcap/stats')]);
+  pcapFiles=list?.files||[];
+  if(stats){document.getElementById('pcap-files').textContent=stats.total_files||0;document.getElementById('pcap-size').textContent=(stats.total_size_mb||0).toFixed(1)+' MB';document.getElementById('pcap-retention').textContent=(stats.retention_days||30)+'d';}
+  renderPcap();
+}
+async function deletePcap(name){
+  if(!confirm('Delete '+name+'?'))return;
+  await api('DELETE',`/api/pcap/${encodeURIComponent(name)}`);loadPcap();
+}
+async function loadSettings(){
+  const r=await api('GET','/api/config');
+  if(r?.config)appConfig=r.config;
+  renderSettings();
+}
+async function applyProfile(profile){
+  await api('POST',`/api/config/profile/${profile}`);
+  loadSettings();
+  alert('Profile "'+profile+'" applied. Changes to thresholds apply live. Profile changes apply immediately.');
+}
+async function saveSetting(section,key,value,label){
+  const r=await api('POST','/api/config',{section,key,value});
+  if(r?.updated){
+    showToast(`✓ Saved: ${label||key}`,'green');
+  } else {
+    showToast(`✗ Save failed — check server logs`,'red');
+  }
+}
+
+function showToast(msg,color='green'){
+  let t=document.getElementById('_toast');
+  if(!t){t=document.createElement('div');t.id='_toast';t.style.cssText='position:fixed;bottom:24px;right:24px;padding:10px 18px;border-radius:8px;font-size:12px;font-weight:700;font-family:monospace;z-index:9999;transition:opacity .3s';document.body.appendChild(t);}
+  t.style.background=color==='green'?'rgba(48,209,88,.9)':'rgba(255,59,92,.9)';
+  t.style.color='#fff';t.textContent=msg;t.style.opacity='1';
+  setTimeout(()=>{t.style.opacity='0';},3000);
+}
+
+// ─── v4.0 RENDER FUNCTIONS ────────────────────────────────────────────────────
+
+function renderGeoMap(){
+  // Stats
+  const pub=geoPoints.filter(p=>!p.is_private);
+  const priv=geoPoints.filter(p=>p.is_private);
+  const highrisk=geoPoints.filter(p=>p.high_risk);
+  document.getElementById('geo-countries').textContent=geoCountries.length;
+  document.getElementById('geo-highrisk').textContent=highrisk.length;
+  document.getElementById('geo-ips').textContent=pub.length;
+  document.getElementById('geo-private').textContent=priv.length;
+
+  // SVG map — place pins at approximate lat/lon
+  const svg=document.getElementById('alert-pins');
+  if(!svg)return;
+  const SEV_COL={CRITICAL:'#ff3b5c',HIGH:'#ff6b35',MEDIUM:'#ffd60a',LOW:'#30d158'};
+  // Simple equirectangular projection: x=(lon+180)/360*800, y=(90-lat)/180*400
+  svg.innerHTML=geoPoints.map(p=>{
+    const x=((p.lon+180)/360*800).toFixed(1);
+    const y=((90-p.lat)/180*400).toFixed(1);
+    const c=SEV_COL[p.severity]||'#00c2ff';
+    const r=Math.min(12,4+Math.log2(p.alert_count+1)*2);
+    const shape=p.high_risk?
+      `<polygon points="${x},${y-r} ${x+r*0.8},${y+r*0.6} ${x-r*0.8},${y+r*0.6}" fill="${c}" opacity="0.85"/>`:`<circle cx="${x}" cy="${y}" r="${r}" fill="${c}" opacity="0.75"/>`;
+    return `<g><title>CyberRemedy SOC PLATFORM v1.0</title>${shape}</g>`;
+  }).join('');
+
+  // Draw faint world outline dots
+  const dots=document.getElementById('map-dots');
+  if(dots&&!dots.childNodes.length){
+    // Simple grid of continent-hinted dots
+    const continents=[[200,140],[400,160],[500,140],[600,150],[350,200],[450,210],[250,280],[400,300],[150,200],[550,260]];
+    dots.innerHTML=continents.map(([cx,cy])=>
+      `<ellipse cx="${cx}" cy="${cy}" rx="60" ry="35" fill="none" stroke="#0d1a26" stroke-width="1"/>`
+    ).join('');
+  }
+}
+
+function renderGeoCountries(){
+  const tbody=document.getElementById('geo-countries-tbody');
+  if(!tbody)return;
+  tbody.innerHTML=geoCountries.slice(0,15).map(c=>`<tr>
+    <td style="font-size:18px">${c.flag||'🌐'}</td>
+    <td style="color:#e8f4ff">${esc(c.country)}</td>
+    <td style="font-family:monospace;color:${c.count>5?'#ff3b5c':'#ffd60a'};font-weight:700">${c.count}</td>
+    <td>${c.high_risk?'<span style="color:#ff3b5c;font-size:9px;font-family:monospace">HIGH RISK</span>':'<span style="color:#3a5a6a;font-size:9px">–</span>'}</td>
+  </tr>`).join('')||'<tr><td colspan="4" style="color:#3a5a6a;text-align:center;padding:20px">No external IPs detected yet</td></tr>';
+
+  const ipBody=document.getElementById('geo-ips-tbody');
+  if(ipBody)ipBody.innerHTML=geoPoints.filter(p=>!p.is_private).slice(0,15).map(p=>`<tr>
+    <td style="font-family:monospace;color:#00c2ff">${esc(p.ip)}</td>
+    <td style="color:#8aaabb">${p.flag||'🌐'} ${esc(p.city||p.country||'?')}</td>
+    <td style="color:#4a6a7a;font-size:10px">${esc((p.org||'').substring(0,25))}</td>
+    <td style="font-family:monospace;color:${p.alert_count>3?'#ff3b5c':'#ffd60a'}">${p.alert_count}</td>
+  </tr>`).join('')||'<tr><td colspan="4" style="color:#3a5a6a;text-align:center;padding:20px">No external traffic seen yet</td></tr>';
+}
+
+function renderAssets(){
+  const el=document.getElementById('as-total');if(el)el.textContent=assetList.length;
+  const ac=document.getElementById('as-active');if(ac)ac.textContent=assetList.filter(d=>d.status==='active').length;
+  document.getElementById('nb-assets').textContent=assetList.length;
+
+  const tbody=document.getElementById('assets-tbody');if(!tbody)return;
+  tbody.innerHTML=assetList.length?assetList.map(d=>`<tr>
+    <td style="font-family:monospace;color:#00c2ff">${esc(d.ip)}</td>
+    <td>
+      <div style="color:#e8f4ff;font-weight:600">${esc(d.label||d.hostname||'?')}</div>
+      ${d.label&&d.hostname?`<div style="font-size:9px;color:#3a5a6a">${esc(d.hostname)}</div>`:''}
+    </td>
+    <td><div style="font-family:monospace;font-size:9px;color:#4a6a7a">${esc(d.mac||'?')}</div><div style="font-size:9px;color:#3a5a6a">${esc(d.vendor||'')}</div></td>
+    <td style="font-family:monospace;font-size:9px;color:#7c5cbf">${(d.open_ports||[]).join(', ')||'–'}</td>
+    <td style="font-family:monospace;font-size:9px;color:#3a5a6a">${fmt(d.first_seen)}</td>
+    <td style="font-family:monospace;font-size:9px;color:#4a6a7a">${fmt(d.last_seen)}</td>
+    <td><button class="btn btn-cyan" style="font-size:9px;padding:3px 7px" onclick="labelAsset('${esc(d.ip)}')">Label</button></td>
+  </tr>`).join(''):'<tr><td colspan="7" style="color:#3a5a6a;text-align:center;padding:20px">No devices discovered yet. Click "Scan Now" to run ARP discovery.</td></tr>';
+}
+
+function renderLogs(){
+  const tbody=document.getElementById('log-tbody');if(!tbody)return;
+  if(!logResults.length){tbody.innerHTML='<tr><td colspan="6" style="color:#3a5a6a;text-align:center;padding:20px">No results. Run a search above.</td></tr>';return;}
+  const keys=Object.keys(logResults[0]).slice(0,6);
+  const thead=document.getElementById('log-thead-row');
+  if(thead)thead.innerHTML=keys.map(k=>`<th>${k}</th>`).join('');
+  tbody.innerHTML=logResults.slice(0,200).map(r=>`<tr>${keys.map(k=>{
+    const v=r[k];const vs=String(v||'');
+    const color=k==='severity'?(v==='CRITICAL'?'#ff3b5c':v==='HIGH'?'#ff6b35':v==='MEDIUM'?'#ffd60a':'#30d158'):'inherit';
+    return`<td style="font-family:monospace;font-size:9px;color:${color};max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(vs.substring(0,60))}</td>`;
+  }).join('')}</tr>`).join('');
+}
+
+function renderLogStats(){
+  const el=document.getElementById('log-storage-stats');if(!el)return;
+  const channels=logStorageStats.channels||{};
+  el.innerHTML=Object.entries(channels).map(([name,s])=>`
+    <div style="background:#070e17;border:1px solid #0d1a26;border-radius:6px;padding:10px">
+      <div style="font-size:9px;color:#3a5a6a;font-family:monospace;margin-bottom:4px">${name.toUpperCase()}</div>
+      <div style="font-size:13px;font-weight:700;color:#e8f4ff;font-family:monospace">${s.size_mb||0} MB</div>
+      <div style="font-size:9px;color:#4a6a7a;margin-top:2px">${s.today_records||0} records today</div>
+    </div>`).join('');
+}
+
+function renderFirewall(){
+  const tbody=document.getElementById('fw-tbody');if(!tbody)return;
+  tbody.innerHTML=fwBlocked.length?fwBlocked.map(b=>`<tr>
+    <td style="font-family:monospace;color:#ff3b5c">${esc(b.ip)}</td>
+    <td style="color:#8aaabb">${esc(b.reason||'?')}</td>
+    <td style="font-family:monospace;font-size:9px;color:#3a5a6a">${fmt(b.blocked_at)}</td>
+    <td style="font-family:monospace;font-size:9px;color:#ffd60a">${b.expires_at?fmt(b.expires_at):'Permanent'}</td>
+    <td style="font-size:9px;color:#4a6a7a;font-family:monospace">${esc(b.backend||'?')}</td>
+    <td><button class="btn btn-green" style="font-size:9px;padding:3px 7px" onclick="fwUnblock('${esc(b.ip)}')">Unblock</button></td>
+  </tr>`).join(''):'<tr><td colspan="6" style="color:#3a5a6a;text-align:center;padding:20px">No active blocks.</td></tr>';
+  document.getElementById('fw-count').textContent=fwBlocked.length;
+
+  const rulesEl=document.getElementById('fw-rules-list');
+  if(rulesEl)rulesEl.innerHTML=fwRules.length?fwRules.map(r=>
+    `<div style="padding:3px 0;border-bottom:1px solid #0a1520">${esc(JSON.stringify(r))}</div>`
+  ).join(''):'<div style="color:#3a5a6a;padding:8px">No system rules found (may need elevated permissions)</div>';
+}
+
+function renderPcap(){
+  const tbody=document.getElementById('pcap-tbody');if(!tbody)return;
+  tbody.innerHTML=pcapFiles.length?pcapFiles.map(f=>`<tr>
+    <td style="font-family:monospace;color:#00c2ff">${esc(f.name)}</td>
+    <td style="font-family:monospace;color:#ffd60a">${f.size_mb} MB</td>
+    <td style="font-family:monospace;font-size:9px;color:#3a5a6a">${fmt(f.modified)}</td>
+    <td><button class="btn btn-red" style="font-size:9px;padding:3px 7px" onclick="deletePcap('${esc(f.name)}')">Delete</button></td>
+  </tr>`).join(''):'<tr><td colspan="4" style="color:#3a5a6a;text-align:center;padding:20px">No PCAP files yet. Enable <code style="color:#00c2ff">capture.pcap_save_enabled</code> in Settings to start recording.</td></tr>';
+}
+
+function renderSettings(){
+  const cfg=appConfig;
+  // Profile cards
+  const profEl=document.getElementById('profile-cards');
+  if(profEl){
+    const profiles=[
+      {id:'laptop',icon:'💻',name:'Laptop',desc:'Single machine monitoring'},
+      {id:'home',icon:'🏠',name:'Home Network',desc:'Monitor 192.168.x.x devices'},
+      {id:'office',icon:'🏢',name:'Office / LAN',desc:'Enterprise network monitoring'},
+      {id:'cloud',icon:'☁',name:'Cloud / VPS',desc:'Public-facing server'}
+    ];
+    const active=cfg.deployment?.profile||'laptop';
+    profEl.innerHTML=profiles.map(p=>`
+      <div onclick="applyProfileFixed('${p.id}')" style="background:#070e17;border:1px solid ${p.id===active?'#00c2ff':'#0d1a26'};border-radius:8px;padding:14px;cursor:pointer;transition:all .15s;${p.id===active?'box-shadow:0 0 0 1px #00c2ff44;':''}" onmouseover="this.style.borderColor='#00c2ff'" onmouseout="this.style.borderColor='${p.id===active?'#00c2ff':'#0d1a26'}'">
+        <div style="font-size:24px;margin-bottom:6px">${p.icon}</div>
+        <div style="font-weight:700;color:#e8f4ff;margin-bottom:3px">${p.name}</div>
+        <div style="font-size:10px;color:#3a5a6a">${p.desc}</div>
+        ${p.id===active?'<div style="font-size:9px;color:#00c2ff;margin-top:6px;font-family:monospace">● ACTIVE</div>':''}
+      </div>`).join('');
+  }
+
+  // Detection thresholds
+  const thEl=document.getElementById('threshold-settings');
+  if(thEl){
+    const sig=cfg.detection?.signature||{};
+    const inputs=[
+      ['Port scan threshold',sig.port_scan_threshold||15,'detection','port_scan_threshold'],
+      ['Brute force threshold',sig.brute_force_threshold||10,'detection','brute_force_threshold'],
+      ['DNS entropy threshold',sig.dns_entropy_threshold||3.8,'detection','dns_entropy_threshold'],
+      ['Critical score',cfg.scoring?.critical_threshold||80,'scoring','critical_threshold'],
+      ['High score',cfg.scoring?.high_threshold||60,'scoring','high_threshold'],
+      ['Medium score',cfg.scoring?.medium_threshold||40,'scoring','medium_threshold'],
+    ];
+    thEl.innerHTML=inputs.map(([label,val,sec,key])=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:#070e17;border:1px solid #0d1a26;border-radius:6px">
+        <label style="font-size:10px;color:#8aaabb">${label}</label>
+        <input type="number" value="${val}" style="background:#04080f;border:1px solid #1a2a3a;border-radius:4px;color:#00c2ff;padding:4px 8px;width:80px;font-family:monospace;outline:none" onchange="saveSetting('${sec}','${key}',parseFloat(this.value))">
+      </div>`).join('');
+  }
+
+  // Response settings
+  const respEl=document.getElementById('response-settings');
+  if(respEl){
+    const resp=cfg.response||{};
+    const toggles=[
+      ['Auto-block CRITICAL','auto_block_critical',resp.auto_block_critical,'response'],
+      ['Auto-block HIGH','auto_block_high',resp.auto_block_high,'response'],
+      ['Auto-block MEDIUM','auto_block_medium',resp.auto_block_medium,'response'],
+      ['Dry run (log only)','dry_run',resp.dry_run,'response'],
+      ['Notify on block','notify_on_block',resp.notify_on_block,'response'],
+    ];
+    respEl.innerHTML=toggles.map(([label,key,val,sec])=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:#070e17;border:1px solid #0d1a26;border-radius:6px">
+        <span style="font-size:11px;color:#8aaabb">${label}</span>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <span style="font-size:9px;font-family:monospace;color:${val?'#30d158':'#ff3b5c'}">${val?'ON':'OFF'}</span>
+          <input type="checkbox" ${val?'checked':''} onchange="saveSetting('${sec}','${key}',this.checked)" style="accent-color:#00c2ff;width:16px;height:16px">
+        </label>
+      </div>`).join('');
+  }
+
+  // Notifications
+  const notifEl=document.getElementById('notif-settings');
+  if(notifEl){
+    const notif=cfg.notifications||{};
+    const fields=[
+      ['Slack Webhook URL','slack_webhook',notif.slack_webhook||'','notifications','slack_enabled',notif.slack_enabled],
+      ['Discord Webhook URL','discord_webhook',notif.discord_webhook||'','notifications','discord_enabled',notif.discord_enabled],
+      ['Telegram Bot Token','telegram_bot_token',notif.telegram_bot_token||'','notifications','telegram_enabled',notif.telegram_enabled],
+    ];
+    notifEl.innerHTML=fields.map(([label,key,val,sec,enKey,enabled])=>`
+      <div style="padding:8px;background:#070e17;border:1px solid #0d1a26;border-radius:6px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+          <span style="font-size:10px;color:#8aaabb">${label}</span>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:9px;color:${enabled?'#30d158':'#3a5a6a'}">
+            ${enabled?'Enabled':'Disabled'}
+            <input type="checkbox" ${enabled?'checked':''} onchange="saveSetting('${sec}','${enKey}',this.checked)" style="accent-color:#00c2ff">
+          </label>
+        </div>
+        <input class="input" value="${esc(val)}" placeholder="Enter URL / token..." onchange="saveSetting('${sec}','${key}',this.value)" style="font-family:monospace;font-size:10px">
+      </div>`).join('');
+  }
+
+  // Firewall settings
+  const fwsEl=document.getElementById('fw-settings');
+  if(fwsEl){
+    const fw=cfg.firewall||{};
+    fwsEl.innerHTML=`
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:#070e17;border:1px solid #0d1a26;border-radius:6px">
+        <span style="font-size:11px;color:#8aaabb">Backend</span>
+        <select onchange="saveSetting('firewall','backend',this.value)" style="background:#04080f;border:1px solid #1a2a3a;border-radius:4px;color:#00c2ff;padding:4px 8px;font-family:monospace">
+          ${['auto','iptables','ufw','nftables','windows','simulation'].map(b=>`<option value="${b}" ${fw.backend===b?'selected':''}>${b}</option>`).join('')}
+        </select>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:#070e17;border:1px solid #0d1a26;border-radius:6px">
+        <span style="font-size:11px;color:#8aaabb">Enabled</span>
+        <input type="checkbox" ${fw.enabled!==false?'checked':''} onchange="saveSetting('firewall','enabled',this.checked)" style="accent-color:#00c2ff;width:16px;height:16px">
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:#070e17;border:1px solid #0d1a26;border-radius:6px">
+        <span style="font-size:11px;color:#8aaabb">Dry Run (log only)</span>
+        <input type="checkbox" ${fw.dry_run?'checked':''} onchange="saveSetting('firewall','dry_run',this.checked)" style="accent-color:#00c2ff;width:16px;height:16px">
+      </div>`;
+  }
+
+  // API Keys
+  const apiKeyEl=document.getElementById('api-key-settings');
+  if(apiKeyEl){
+    const ti=cfg.threat_intel||{};
+    const geo=cfg.geoip||{};
+    apiKeyEl.innerHTML=[
+      ['VirusTotal API Key (optional)','virustotal_api_key',ti.virustotal_api_key||'','threat_intel'],
+      ['OTX API Key (optional)','otx_api_key',ti.otx_api_key||'','threat_intel'],
+    ].map(([label,key,val,sec])=>`
+      <div style="padding:8px;background:#070e17;border:1px solid #0d1a26;border-radius:6px">
+        <div style="font-size:10px;color:#8aaabb;margin-bottom:6px">${label}</div>
+        <input class="input" type="password" value="${esc(val||'')}" placeholder="Enter API key..." onchange="saveSetting('${sec}','${key}',this.value)" style="font-family:monospace;font-size:10px">
+      </div>`).join('');
+  }
+}
+
+// ─── v4.0 NAV override — load data when switching pages ───────────────────────
+const _origNav=nav;
+nav = function(page){
+  _origNav(page);
+  if(page==='geomap')loadGeoMap();
+  else if(page==='assets'){
+    loadAssets();
+    // Trigger a fresh scan on first visit if no devices found yet
+    if(assetList.length === 0){
+      api('POST','/api/assets/scan');
+      setTimeout(loadAssets, 8000);
+      setTimeout(loadAssets, 20000);
+    }
+  }
+  else if(page==='logsearch'){loadLogStats();}
+  else if(page==='firewall')loadFirewall();
+  else if(page==='pcap')loadPcap();
+  else if(page==='settings')loadSettings();
+}
+
+// ─── v4.0 SIDE PANEL — add geo info to recent alerts ─────────────────────────
+const _origRender=render;
+render = function(){
+  _origRender();
+  // Update asset count badge
+  const nb=document.getElementById('nb-assets');
+  if(nb)nb.textContent=assetList.length;
+}
+
+// ─── v4.0 INIT ────────────────────────────────────────────────────────────────
+// Load initial geo data in background
+setTimeout(()=>{loadGeoMap();loadAssets();loadFirewall();loadLogStats();loadSettings();},2000);
+setInterval(()=>{if(currentPage==='geomap')loadGeoMap();else if(currentPage==='assets')loadAssets();else if(currentPage==='firewall')loadFirewall();},15000);
+
+
+
+// ── DARK / LIGHT MODE ──────────────────────────────────────────────────────
+let _darkMode = true;
+function toggleDark() {
+  const chk = document.getElementById('theme-toggle');
+  _darkMode = chk ? !chk.checked : !_darkMode;
+  document.body.classList.toggle('light', !_darkMode);
+  const icon  = document.getElementById('theme-icon');
+  const label = document.getElementById('theme-label');
+  if (icon)  icon.textContent  = _darkMode ? '🌙' : '☀️';
+  if (label) label.textContent = _darkMode ? 'DARK' : 'LIGHT';
+  try { localStorage.setItem('cyberremedy_theme', _darkMode ? 'dark' : 'light'); } catch(e) {}
+}
+(function() {
+  try {
+    const t = localStorage.getItem('cyberremedy_theme');
+    if (t === 'light') {
+      _darkMode = false; document.body.classList.add('light');
+      setTimeout(() => {
+        const chk = document.getElementById('theme-toggle');
+        if (chk) chk.checked = true;
+        const icon = document.getElementById('theme-icon');
+        const label = document.getElementById('theme-label');
+        if (icon) icon.textContent = '☀️';
+        if (label) label.textContent = 'LIGHT';
+      }, 0);
+    }
+  } catch(e) {}
+})();
+
+// ── BROWSER NOTIFICATIONS ───────────────────────────────────────────────────
+let _notifEnabled = false;
+let _notifQueue = [];
+function toggleNotifs() {
+  if (!_notifEnabled && 'Notification' in window) {
+    Notification.requestPermission().then(p => {
+      _notifEnabled = p === 'granted';
+      if (_notifEnabled) showToast('🔔 Browser notifications ON','green');
+      else showToast('Notifications denied','red');
+    });
+  } else {
+    _notifEnabled = false; showToast('Notifications OFF','red');
+  }
+}
+function pushNotif(title, body, severity) {
+  if (!_notifEnabled) return;
+  const icon = {CRITICAL:'🚨',HIGH:'🔴',MEDIUM:'🟡',LOW:'🟢'}[severity]||'⚠️';
+  new Notification(icon + ' CyberRemedy: ' + title, {body, icon: '/favicon.ico'});
+  const badge = document.getElementById('notif-badge');
+  _notifQueue.push({title, body, severity});
+  if (badge) { badge.style.display='flex'; badge.textContent=Math.min(_notifQueue.length,99); }
+}
+
+// ── TRAFFIC HEATMAP ─────────────────────────────────────────────────────────
+let _heatmapData = {};
+function renderHeatmap() {
+  const metric = document.getElementById('hm-metric')?.value || 'total';
+  const container = document.getElementById('heatmap-body');
+  const header    = document.getElementById('heatmap-header');
+  if (!container) return;
+
+  // Build 24-hour labels header
+  let hdr = '<div class="heatmap-grid">';
+  hdr += '<div class="heatmap-cell" style="font-size:9px;color:var(--text-dim2)">Device</div>';
+  for (let h = 0; h < 24; h++) {
+    hdr += `<div class="heatmap-cell" style="font-size:9px;color:var(--text-dim2)">${String(h).padStart(2,'0')}</div>`;
+  }
+  hdr += '</div>';
+  header.innerHTML = hdr;
+
+  // Build heatmap from traffic history
+  const history = window._trafficHistory || [];
+  const deviceHours = {};
+  history.forEach(pt => {
+    const h = new Date(pt.ts || Date.now()).getHours();
+    const key = 'Network';
+    if (!deviceHours[key]) deviceHours[key] = new Array(24).fill(0);
+    deviceHours[key][h] += (pt.total || 0);
+  });
+
+  // Add simulated per-device data from recent alerts
+  const alerts = window._recentAlerts || [];
+  alerts.forEach(a => {
+    const ip = a.src_ip || 'unknown';
+    const h  = new Date(a.timestamp || Date.now()).getHours();
+    if (!deviceHours[ip]) deviceHours[ip] = new Array(24).fill(0);
+    deviceHours[ip][h]++;
+  });
+
+  if (Object.keys(deviceHours).length === 0) {
+    container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-dim2)">Collecting traffic data...</div>';
+    return;
+  }
+
+  let html = '';
+  for (const [device, hours] of Object.entries(deviceHours)) {
+    const max = Math.max(...hours, 1);
+    html += '<div class="heatmap-grid" style="margin-top:2px">';
+    html += `<div class="heatmap-cell" style="font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${device}">${device.length > 14 ? device.slice(0,13)+'…' : device}</div>`;
+    hours.forEach((v, h) => {
+      const ratio = v / max;
+      const cls   = ratio === 0 ? 'hm-0' : ratio < .2 ? 'hm-1' : ratio < .4 ? 'hm-2' : ratio < .6 ? 'hm-3' : ratio < .8 ? 'hm-4' : 'hm-5';
+      html += `<div class="heatmap-cell ${cls}" title="${device} ${String(h).padStart(2,'0')}:00 — ${v} events">${v > 0 ? v : ''}</div>`;
+    });
+    html += '</div>';
+  }
+  container.innerHTML = html;
+
+  // Top talkers
+  const talkers = Object.entries(deviceHours)
+    .map(([ip, hrs]) => ({ip, total: hrs.reduce((a,b)=>a+b,0)}))
+    .sort((a,b) => b.total - a.total).slice(0, 15);
+  const tbl = document.getElementById('talkers-tbl');
+  if (tbl) tbl.innerHTML = talkers.map(t =>
+    `<tr><td style="font-family:monospace">${t.ip}</td><td>—</td><td>${t.total}</td><td>—</td><td>${new Date().toLocaleTimeString()}</td></tr>`
+  ).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text-dim2)">No data</td></tr>';
+}
+
+// Draw traffic history chart on canvas
+function drawTrafficChart() {
+  const canvas = document.getElementById('traffic-chart');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.offsetWidth; const H = 160;
+  canvas.width = W; canvas.height = H;
+  const hist = (window._trafficHistory || []).slice(-60);
+  if (!hist.length) { ctx.fillStyle='#1a2a3a'; ctx.fillRect(0,0,W,H); return; }
+  const maxV = Math.max(...hist.map(p => p.total||0), 1);
+  ctx.clearRect(0,0,W,H);
+  // Background
+  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--bg-input').trim() || '#070e17';
+  ctx.fillRect(0,0,W,H);
+  // Benign line
+  ctx.beginPath(); ctx.strokeStyle='rgba(48,209,88,.6)'; ctx.lineWidth=1.5;
+  hist.forEach((p,i) => { const x=i/(hist.length-1)*W; const y=H-(p.benign||0)/maxV*(H-10)-5; i===0?ctx.moveTo(x,y):ctx.lineTo(x,y); });
+  ctx.stroke();
+  // Malicious line
+  ctx.beginPath(); ctx.strokeStyle='rgba(255,59,92,.8)'; ctx.lineWidth=1.5;
+  hist.forEach((p,i) => { const x=i/(hist.length-1)*W; const y=H-(p.malicious||0)/maxV*(H-10)-5; i===0?ctx.moveTo(x,y):ctx.lineTo(x,y); });
+  ctx.stroke();
+  // Legend
+  ctx.fillStyle='rgba(48,209,88,.8)'; ctx.fillRect(W-80,8,20,3);
+  ctx.fillStyle='var(--text)'; ctx.font='9px monospace'; ctx.fillText('Benign',W-56,12);
+  ctx.fillStyle='rgba(255,59,92,.8)'; ctx.fillRect(W-80,20,20,3);
+  ctx.fillStyle='var(--text)'; ctx.fillText('Alert',W-56,24);
+}
+
+// ── SYSLOG PAGE ─────────────────────────────────────────────────────────────
+let _syslogEvents = [];
+async function loadSyslog() {
+  try {
+    const r = await api('GET', '/api/logs/events?since_hours=1&limit=200');
+    _syslogEvents = (r?.records || []).filter(e => e.source === 'syslog' || e.source === 'windows_event_log' || e.event_type === 'syslog');
+    document.getElementById('sl-total').textContent = _syslogEvents.length;
+    document.getElementById('sl-win').textContent   = _syslogEvents.filter(e=>e.source==='windows_event_log').length;
+    document.getElementById('sl-linux').textContent = _syslogEvents.filter(e=>e.source==='syslog').length;
+    renderSyslog();
+  } catch(e) {}
+}
+function renderSyslog() {
+  const filter = document.getElementById('sl-filter')?.value.toLowerCase() || '';
+  const src    = document.getElementById('sl-source')?.value || '';
+  const rows   = _syslogEvents.filter(e =>
+    (!src || e.source === src) &&
+    (!filter || JSON.stringify(e).toLowerCase().includes(filter))
+  ).slice(0, 200);
+  const tbl = document.getElementById('syslog-tbl');
+  if (!tbl) return;
+  if (!rows.length) { tbl.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--text-dim2);padding:20px">No syslog events</td></tr>'; return; }
+  tbl.innerHTML = rows.map(e => `
+    <tr>
+      <td style="font-size:9px;font-family:monospace;white-space:nowrap">${(e.ts||e.timestamp||'').slice(0,19)}</td>
+      <td style="font-family:monospace;font-size:10px">${e.host||e.agent_ip||'?'}</td>
+      <td><span class="pill pill-${e.source==='windows_event_log'?'amber':'green'}" style="font-size:8px">${e.source==='windows_event_log'?'WIN':'SYSLOG'}</span></td>
+      <td style="font-size:10px">${e.tag||e.ProviderName||e.detail||'?'}</td>
+      <td><span class="sev sev-${e.severity||'LOW'}">${e.severity||'LOW'}</span></td>
+      <td style="font-size:10px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${e.message||e.Message||e.detail||'?'}</td>
+    </tr>`).join('');
+}
+function exportSyslog() {
+  const rows = _syslogEvents;
+  if (!rows.length) return;
+  const keys = ['ts','host','source','tag','severity','message'];
+  let csv = keys.join(',') + '\n';
+  rows.forEach(r => csv += keys.map(k => JSON.stringify(r[k]||'')).join(',') + '\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv,' + encodeURIComponent(csv);
+  a.download = 'syslog-export.csv'; a.click();
+}
+
+// ── REPORTS PAGE ────────────────────────────────────────────────────────────
+async function saveEmailConfig() {
+  const cfg = {
+    smtp_host: document.getElementById('em-smtp')?.value,
+    smtp_port: parseInt(document.getElementById('em-port')?.value || 587),
+    smtp_user: document.getElementById('em-user')?.value,
+    smtp_password: document.getElementById('em-pass')?.value,
+    to_addrs:  (document.getElementById('em-to')?.value||'').split(',').map(s=>s.trim()).filter(Boolean),
+    enabled: true,
+    alert_severities: ['CRITICAL','HIGH','MEDIUM'].filter(s => document.getElementById('em-'+s.toLowerCase())?.checked),
+  };
+  await api('POST', '/api/config', {section:'notifications', key:'email', value:cfg});
+  showToast('Email config saved','green');
+}
+async function testEmail() {
+  const r = await api('POST', '/api/report/test-email', {});
+  showToast(r?.sent ? '📧 Test email sent!' : 'Email failed — check config','green');
+}
+async function saveReportSchedule() {
+  const enabled = document.getElementById('sched-enabled')?.checked;
+  const hour    = parseInt(document.getElementById('sched-hour')?.value || 8);
+  await api('POST', '/api/config', {section:'reporting', key:'scheduled_reports', value:enabled});
+  await api('POST', '/api/config', {section:'reporting', key:'daily_report_hour', value:hour});
+  document.getElementById('rpt-schedule').textContent = enabled ? `Daily ${String(hour).padStart(2,'0')}:00` : 'Off';
+  showToast('Report schedule saved','green');
+}
+async function runReportNow() {
+  showToast('Generating report...','green');
+  const r = await api('POST', '/api/report/generate', {});
+  if (r?.filename) { showToast(`Report saved: ${r.filename}`,'green'); loadReports(); }
+}
+async function loadReports() {
+  try {
+    const r = await api('GET', '/api/report/list');
+    const rows = r?.reports || [];
+    document.getElementById('rpt-count').textContent = rows.length;
+    const tbl = document.getElementById('reports-tbl');
+    if (!tbl) return;
+    tbl.innerHTML = rows.map(f => `
+      <tr>
+        <td style="font-family:monospace;font-size:10px">${f.name}</td>
+        <td>HTML</td><td>—</td><td>—</td>
+        <td><a href="/api/report/${f.name}" target="_blank" class="btn btn-cyan" style="text-decoration:none;font-size:9px">View</a></td>
+      </tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text-dim2);padding:12px">No reports yet</td></tr>';
+  } catch(e) {}
+}
+
+// ── NAV EXTENSION ────────────────────────────────────────────────────────────
+const _origNav2 = nav;
+nav = function(page) {
+  _origNav2(page);
+  if (page === 'syslog')   { loadSyslogFixed(); }
+  if (page === 'yara')     { loadYara(); }
+  if (page === 'sigma')    { loadSigmaRules(); }
+  if (page === 'heatmap')  { loadHeatmapData(); }
+  if (page === 'reports')  { initReportsPage(); }
+};
+
+// ── WEBSOCKET HOOK — push notifs for CRITICAL/HIGH ────────────────────────────
+const _origHandleWSMsg2 = handleWSMsg;
+handleWSMsg = function(data) {
+  _origHandleWSMsg2(data);
+  if (data.type === 'state_update') {
+    window._trafficHistory = data.traffic_history || window._trafficHistory || [];
+    window._recentAlerts   = data.recent_alerts   || window._recentAlerts   || [];
+  }
+  if (data.type === 'new_alert') {
+    const sev = data.alert?.severity;
+    if (sev === 'CRITICAL' || sev === 'HIGH') {
+      pushNotif(data.alert.type, `From: ${data.alert.src_ip}`, sev);
+    }
+  }
+};
+
+// Auto-refresh heatmap when on that page
+setInterval(() => {
+  if (document.getElementById('page-heatmap')?.classList.contains('active')) {
+    renderHeatmap(); drawTrafficChart();
+  }
+}, 5000);
+
+// ── FIX: YARA rule loader ──────────────────────────────────────────────────────
+async function loadYara() {
+  try {
+    const r = await api('GET', '/api/yara/rules');
+    const rules = r?.rules || [];
+    const hits  = r?.recent_hits || [];
+    const stats = r?.stats || {};
+    const tbody = document.getElementById('yara-tbody');
+    if (!tbody) return;
+    if (rules.length === 0 && hits.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text-dim2);padding:16px">Loading built-in rules... (~6 rules active)</td></tr>';
+      // Retry once
+      setTimeout(loadYara, 3000);
+      return;
+    }
+    // Show loaded rules
+    tbody.innerHTML = rules.map(rule => `
+      <tr>
+        <td style="font-family:monospace;font-size:11px">${rule.name}</td>
+        <td><span class="sev sev-HIGH">HIGH</span></td>
+        <td style="font-size:10px">T1059</td>
+        <td><span class="pill pill-green" style="font-size:8px">● ACTIVE</span></td>
+      </tr>`).join('') +
+      (hits.length ? `<tr><td colspan="4" style="font-size:10px;color:var(--text-dim2);padding:4px 10px">
+        Recent hits: ${hits.length} matches recorded</td></tr>` : '');
+    // Update pipeline status
+    const yaraEl = document.querySelector('.status-item[data-module="yara"]');
+  } catch(e) { console.error('loadYara:', e); }
+}
+
+// ── FIX: Sigma rule loader ────────────────────────────────────────────────────
+async function loadSigmaRules() {
+  try {
+    const r = await api('GET', '/api/sigma/rules');
+    const rules = r?.rules || [];
+    const tbody = document.getElementById('sigma-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = rules.map(rule => `
+      <tr>
+        <td style="font-family:monospace;font-size:11px">${rule.name||rule.id||'?'}</td>
+        <td><span class="sev sev-${rule.severity||'MEDIUM'}">${rule.severity||'MEDIUM'}</span></td>
+        <td style="font-size:10px">${rule.mitre_id||'?'}</td>
+        <td style="font-size:10px">${rule.category||'?'}</td>
+      </tr>`).join('') ||
+      '<tr><td colspan="4" style="text-align:center;color:var(--text-dim2);padding:16px">No sigma rules loaded</td></tr>';
+  } catch(e) {}
+}
+
+// ── FIX: Heatmap — pull traffic_history from /api/traffic endpoint ────────────
+async function loadHeatmapData() {
+  try {
+    const r = await api('GET', '/api/traffic');
+    if (r?.history) window._trafficHistory = r.history;
+    // Also use recent alerts
+    const ar = await api('GET', '/api/alerts?limit=200');
+    if (ar?.alerts) window._recentAlerts = ar.alerts;
+  } catch(e) {}
+  renderHeatmap();
+  drawTrafficChart();
+}
+
+// ── FIX: Syslog — show ALL recent events from all channels ────────────────────
+async function loadSyslogFixed() {
+  try {
+    // Fetch from multiple channels
+    const [evtR, alertR] = await Promise.all([
+      api('GET', '/api/logs/events?limit=500'),
+      api('GET', '/api/syslog/stats'),
+    ]);
+    const events = evtR?.records || [];
+    // Show all events including non-syslog as "system events"
+    _syslogEvents = events;
+    document.getElementById('sl-total').textContent  = events.length;
+    document.getElementById('sl-win').textContent    = events.filter(e=>e.source==='windows_event_log'||e.event_type==='windows').length;
+    document.getElementById('sl-linux').textContent  = events.filter(e=>e.source==='syslog'||e.facility).length;
+    document.getElementById('sl-alerts').textContent = events.filter(e=>e.severity==='CRITICAL'||e.severity==='HIGH').length;
+    if (events.length === 0) {
+      const tbl = document.getElementById('syslog-tbl');
+      if (tbl) tbl.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-dim2);padding:20px">
+        <b style="color:var(--accent)">No syslog events yet.</b><br><br>
+        To start receiving logs, run on your Linux machine:<br>
+        <code style="background:var(--bg-input);padding:4px 8px;border-radius:4px">echo "*.* @@SERVER_IP:5514" | sudo tee -a /etc/rsyslog.conf && sudo systemctl restart rsyslog</code><br><br>
+        Or run the Windows agent:<br>
+        <code style="background:var(--bg-input);padding:4px 8px;border-radius:4px">python agent/windows_agent.py --server SERVER_IP</code>
+      </td></tr>`;
+    } else {
+      renderSyslog();
+    }
+  } catch(e) { console.error('loadSyslog:', e); }
+}
+
+// ── FIX: Reports page — pre-populate from config + load existing reports ──────
+async function initReportsPage() {
+  try {
+    const cfg = await api('GET', '/api/config');
+    const em  = cfg?.notifications?.email || {};
+    const rpt = cfg?.reporting || {};
+    // Populate email fields
+    const fields = {
+      'em-smtp': em.smtp_host || '',
+      'em-port': em.smtp_port || 587,
+      'em-user': em.smtp_user || '',
+      'em-to':   (em.to_addrs||[]).join(', '),
+    };
+    Object.entries(fields).forEach(([id,val]) => {
+      const el = document.getElementById(id);
+      if (el) el.value = val;
+    });
+    if (document.getElementById('em-crit')) document.getElementById('em-crit').checked = (em.alert_severities||['CRITICAL']).includes('CRITICAL');
+    if (document.getElementById('em-high')) document.getElementById('em-high').checked = (em.alert_severities||['HIGH']).includes('HIGH');
+    if (document.getElementById('em-med'))  document.getElementById('em-med').checked  = (em.alert_severities||[]).includes('MEDIUM');
+    // Schedule
+    const schedEl = document.getElementById('sched-enabled');
+    if (schedEl) schedEl.checked = rpt.scheduled_reports || false;
+    const hourEl  = document.getElementById('sched-hour');
+    if (hourEl)  hourEl.value   = rpt.daily_report_hour || 8;
+    // Update stat displays
+    const schedDisp = document.getElementById('rpt-schedule');
+    if (schedDisp) schedDisp.textContent = rpt.scheduled_reports ? `Daily ${String(rpt.daily_report_hour||8).padStart(2,'0')}:00` : 'Off';
+  } catch(e) {}
+  loadReports();
+}
+
+// ── FIX 6: Settings profile — show live-apply message not restart message ─────
+async function applyProfileFixed(profile) {
+  const r = await api('POST', `/api/config/profile/${profile}`);
+  if (r?.live) {
+    showToast(`✅ Profile "${profile}" applied live — no restart needed`, 'green');
+  } else {
+    showToast(`Profile "${profile}" saved — restart to apply all changes`, 'amber');
+  }
+  // Reload config display
+  loadSettings();
+}
+
+// ── RESTART SERVER BUTTON ─────────────────────────────────────────────────────
+async function restartServer() {
+  if (!confirm('Restart the CyberRemedy server process? Dashboard will reconnect automatically.')) return;
+  showToast('Restarting server...', 'amber');
+  try {
+    await api('POST', '/api/pipeline/restart', {});
+  } catch(e) {
+    // Server restart will disconnect - that's expected
+  }
+  // Reconnect WebSocket after 3 seconds
+  setTimeout(() => {
+    showToast('Reconnecting...', 'green');
+    connectWS();
+  }, 3000);
+}
+</script></body>
+</html>
