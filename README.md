@@ -73,5 +73,25 @@ log { source(s_src); destination(d_cr); };
 <pre><code>sudo systemctl restart syslog-ng</code></pre>
 
 # logger
-<pre><code> logger -n SERVER_IP -P 5514 -T "Test from $(hostname)"</code> 
-  
+<pre><code> logger -n SERVER_IP -P 5514 -T "Test from $(hostname)"</code></pre>
+
+# What CyberRemedy Does
+
+| Capability | Description |
+|------------|-------------|
+| Signature-Based Detection | Detects known attack patterns such as port scans, brute-force attacks, C2 beaconing, DNS tunneling, and SQL injection in real time. |
+| ML Anomaly Detection | Isolation Forest + Random Forest models learn your network baseline and flag deviations. |
+| Attack Chain Correlation | Links related alerts into multi-step attack chains (Recon → Exploit → C2 → Exfil). |
+| MITRE ATT&CK Mapping | Automatically tags alerts with techniques and tactics. |
+| YARA Scanning | Scans packet payloads with built-in or custom rules. |
+| Sigma Rules | Evaluates structured :contentReference detection rules against log streams. |
+| UEBA (User & Entity Behavior Analytics) | Tracks per-entity baselines and raises anomaly alerts on deviations. |
+| Honeypots | Includes six fake services (SSH, HTTP, FTP, Telnet, SMB, MySQL) that trigger alerts on any connection. |
+| SOAR Playbooks | Automated response workflows — block, notify, escalate, run scripts. |
+| Case Management | Full ticket lifecycle with SLA tracking and automatic case creation. |
+| Asset Discovery | ARP + ping sweep finds all LAN devices; new devices generate rogue alerts. |
+| GeoIP Mapping | Visual global map showing inbound alert origins by country. |
+| Syslog Ingestion | Receives RFC 3164/5424 syslog via UDP/TCP on port `5514` (compatible with `rsyslog` and `syslog-ng`). |
+| Windows Event Log Collection | Collects Windows Event Logs via the bundled agent over port `5515`. |
+| Email Alerting & Reporting | Sends CRITICAL/HIGH alerts and daily PDF reports via SMTP. |
+| Firewall Automation | Blocks IPs automatically via `iptables`, `ufw`, `nftables`, or Windows Firewall. |
