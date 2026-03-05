@@ -1,5 +1,5 @@
 #!/bin/bash
-# AID-ARS v4.0 Startup Script
+# CyberRemedy v1.0 Startup Script
 
 cd "$(dirname "$0")"
 
