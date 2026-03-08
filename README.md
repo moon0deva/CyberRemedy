@@ -2,6 +2,8 @@
 CyberRemedy is a self-hosted, Security Information and Event Management (SIEM) system. It provides enterprise-grade threat detection, automated response, and real-time monitoring on a single machine — no cloud subscription, no licence fees, and no external data leaving your network.
 It was built to give small and medium-sized teams the same capabilities that large security operations centres use, including machine learning anomaly detection, MITRE ATT&CK mapping, SOAR playbooks, honeypots, and full log management.
 
+# Website:  https://moon0deva.github.io/cyberrrember/
+
 # Installation & Setup
 
 <pre><code>
