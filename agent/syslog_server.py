@@ -1,5 +1,5 @@
 """
-AID-ARS v4.0 — Syslog Ingestion Server
+CyberRemedy v1.0 — Syslog Ingestion Server
 Listens on UDP/TCP 514 (or custom port) for RFC 3164/5424 syslog.
 Also accepts Windows Event Log in JSON format from the agent.
 No root needed if port > 1024 (default: 5514).
@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Callable, Optional
 from pathlib import Path
 
-logger = _logging.getLogger("aidars.syslog")
+logger = _logging.getLogger("cyberremedy.syslog")
 
 # RFC 3164 syslog pattern
 _SYSLOG_RE = re.compile(
@@ -178,7 +178,7 @@ class SyslogServer:
 
 class AgentReceiver:
     """
-    Receives JSON telemetry from AID-ARS agents (Linux/Windows).
+    Receives JSON telemetry from CyberRemedy agents (Linux/Windows).
     Agent sends: {type, host, data, timestamp}
     """
     def __init__(self, host="0.0.0.0", port=5516, callback: Callable = None):

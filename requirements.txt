@@ -1,3 +1,5 @@
+# ─── CyberRemedy Requirements v3.0 ────────────────────────────────────────────────
+
 # Core API
 fastapi==0.111.0
 uvicorn[standard]==0.29.0
@@ -29,6 +31,8 @@ aiofiles==23.2.1
 # Async support
 asyncio-throttle==1.0.2
 
+# ─── v3.0 New Module Dependencies ─────────────────────────────────────────────
+
 # YARA rule scanning (optional — pure-python fallback built-in)
 yara-python==4.5.1
 
@@ -55,10 +59,11 @@ packaging>=24.0         # version comparison for vuln matching
 pyarrow>=16.0           # Parquet format for efficient data lake storage
 zstd>=1.5               # compression for archived data
 
+# Honeypot services (optional — simulation fallback built-in)
+# opencanary is optional; the module has a pure-python socket honeypot
 
-# v1.0 (all optional — app runs without them)
+# v4.0 (all optional — app runs without them)
 maxminddb-reader>=1.5.0   # offline MaxMind GeoIP (optional - free CSV used by default)
 netifaces>=0.11.0         # better network interface detection
 # System packages (install with apt/brew, not pip):
 # sudo apt install arp-scan nmap
-

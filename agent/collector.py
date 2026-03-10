@@ -1,7 +1,7 @@
 """
-AID-ARS Endpoint Agent — Host Intrusion Detection (HIDS)
+CyberRemedy Endpoint Agent — Host Intrusion Detection (HIDS)
 Collects: FIM (file integrity), processes, auth logs, network connections, system info.
-Designed to run on Linux/macOS/Windows and forward telemetry to the AID-ARS API.
+Designed to run on Linux/macOS/Windows and forward telemetry to the CyberRemedy API.
 """
 
 import os
@@ -16,7 +16,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
-logger = logging.getLogger("aidars.agent")
+logger = logging.getLogger("cyberremedy.agent")
 
 # ─── SYSTEM INFO ──────────────────────────────────────────────────────────────
 
@@ -373,7 +373,7 @@ class NetworkConnectionMonitor:
 class HIDSAgent:
     """
     Orchestrates all HIDS collection modules.
-    Runs continuously and POSTs telemetry to the AID-ARS API.
+    Runs continuously and POSTs telemetry to the CyberRemedy API.
     """
 
     def __init__(self, api_url: str = "http://localhost:8000", interval: float = 30.0,
@@ -389,7 +389,7 @@ class HIDSAgent:
         self.net = NetworkConnectionMonitor()
 
     def _post_events(self, events: List[dict]):
-        """POST a batch of host events to the AID-ARS API."""
+        """POST a batch of host events to the CyberRemedy API."""
         if not events:
             return
         try:
@@ -483,7 +483,7 @@ class HIDSAgent:
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="AID-ARS HIDS Agent")
+    parser = argparse.ArgumentParser(description="CyberRemedy HIDS Agent")
     parser.add_argument("--api", default="http://localhost:8000")
     parser.add_argument("--interval", type=float, default=30.0)
     parser.add_argument("--agent-id", default=None)

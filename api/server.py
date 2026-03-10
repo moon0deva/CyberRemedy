@@ -26,13 +26,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import yaml
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, BackgroundTasks
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse, HTMLResponse, Response
 from pydantic import BaseModel
 
 # Core pipeline
 from capture.sniffer import LiveSniffer, PcapReplayer
+from packet_analyzer.engine import PacketAnalyzer
 from features.extractor import FlowAggregator
 from detection.signature import SignatureDetector
 from detection.anomaly import AnomalyDetector
@@ -55,7 +56,7 @@ from vuln.manager import VulnManager
 from forensics.timeline import ForensicsManager
 from data_lake.storage import DataLake
 from rbac.auth import RBACManager
-# v4.0 modules
+# v1.0 modules
 from log_store.log_manager import LogManager
 from firewall.integrator import FirewallIntegrator
 from assets.discovery import AssetInventory
@@ -102,7 +103,7 @@ vuln_manager    = VulnManager()
 forensics       = ForensicsManager()
 data_lake       = DataLake()
 rbac            = RBACManager()
-# v4.0 component initialisation
+# v1.0 component initialisation
 log_manager   = LogManager(CONFIG)
 firewall      = FirewallIntegrator(CONFIG)
 asset_inv     = AssetInventory(CONFIG)
@@ -112,7 +113,11 @@ geoip         = GeoIPLookup(CONFIG)
 # ── app ──────────────────────────────────────────────────────────────────────
 
 app = FastAPI(title="CyberRemedy API", description="AI-Driven Adaptive IDS — Full SOC Platform v3.0",
-              version="4.0.0", docs_url="/docs", redoc_url="/redoc")
+              version="1.0.0", docs_url="/docs", redoc_url="/redoc")
+
+# CORS must be added BEFORE routes, and allow_credentials=True is invalid with allow_origins=["*"]
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=False,
+                   allow_methods=["*"], allow_headers=["*"])
 
 _DASH = Path(__file__).parent.parent / "dashboard" / "index.html"
 
@@ -120,9 +125,6 @@ _DASH = Path(__file__).parent.parent / "dashboard" / "index.html"
 def serve_dash():
     if _DASH.exists(): return HTMLResponse(_DASH.read_text())
     return HTMLResponse("<h2>Dashboard not found</h2>", status_code=404)
-
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True,
-                   allow_methods=["*"], allow_headers=["*"])
 
 # ── websocket manager ────────────────────────────────────────────────────────
 
@@ -142,9 +144,9 @@ manager = ConnectionManager()
 
 # ── pipeline state ────────────────────────────────────────────────────────────
 
-pipeline_state = dict(running=False, interface="eth0", mode="simulation",
+pipeline_state = dict(running=False, interface="eth0", mode="stopped",
                       packets_processed=0, flows_analyzed=0, alerts_total=0,
-                      start_time=None, version="4.0.0")
+                      start_time=None, version="1.0.0")
 _recent_alerts:    List[dict] = []
 _recent_responses: List[dict] = []
 _recent_chains:    List[dict] = []
@@ -226,6 +228,7 @@ def _on_flow_complete(flow: dict):
         _traffic_counter["benign"] += 1
         _traffic_counter["total"] += 1
 
+_packet_analyzer = PacketAnalyzer(alert_callback=None)  # callback wired after _process_alert defined
 flow_aggregator = FlowAggregator(
     flow_timeout=CONFIG.get("capture", {}).get("flow_timeout_seconds", 60),
     on_flow_complete=_on_flow_complete,
@@ -234,6 +237,11 @@ flow_aggregator = FlowAggregator(
 def _on_packet(pkt: dict):
     pipeline_state["packets_processed"] += 1
     flow_aggregator.add_packet(pkt)
+    # ── Deep packet analysis (Wireshark-style ML analyzer)
+    try:
+        _packet_analyzer.ingest(pkt)
+    except Exception:
+        pass
     payload = pkt.get("payload", b"")
     if len(payload) > 64:
         yara_scanner.scan_bytes(payload, context={"src_ip": pkt.get("src_ip")})
@@ -243,9 +251,9 @@ def _on_honeypot(event: dict):
     _process_alert(event)
     logger.warning(f"HONEYPOT HIT: {event}")
 
-# ── v4.0: wire asset+log callbacks (must be after _process_alert defined) ────
+# ── v1.0: wire asset+log callbacks (must be after _process_alert defined) ────
 def _process_alert_enriched(alert: dict):
-    """v4.0 wrapper: logs to file + adds GeoIP, then runs original pipeline."""
+    """v1.0 wrapper: logs to file + adds GeoIP, then runs original pipeline."""
     try:
         # GeoIP enrich (non-blocking — uses cache)
         src = alert.get("src_ip","")
@@ -282,27 +290,45 @@ async def broadcast_loop():
         if len(_traffic_history) > 120: _traffic_history.pop(0)
         _traffic_counter.update(benign=0, malicious=0, total=0)
         if not manager.active: continue
-        await manager.broadcast({
-            "type": "state_update",
-            "pipeline": {**pipeline_state, "start_time": str(pipeline_state["start_time"])},
-            "recent_alerts":    _recent_alerts[-20:],
-            "recent_responses": _recent_responses[-10:],
-            "active_chains":    correlation_engine.get_active_chains(),
-            "blocked_ips":      responder.registry.get_all(),
-            "traffic_point":    _traffic_history[-1] if _traffic_history else None,
-            "traffic_history":  _traffic_history[-60:],
-            "stats": {
-                **reporter.get_stats(),
-                "responder": responder.stats, "correlator": correlation_engine.stats,
-                "detector_sig": sig_detector.stats, "detector_ml": anomaly_detector.status,
-                "active_flows": flow_aggregator.active_flow_count,
-                "cases": case_manager.stats(), "ueba": ueba_engine.stats(),
-                "honeypot": honeypot_mgr.stats(), "ioc": ioc_manager.get_stats(),
-            },
-            "mitre_coverage":   mitre_mapper.get_coverage_summary(_recent_alerts),
-            "ueba_alerts":      ueba_engine.get_alerts(10),
-            "honeypot_events":  honeypot_mgr.get_alerts(5),
-        })
+        try:
+            payload = {
+                "type": "state_update",
+                "pipeline": {**pipeline_state, "start_time": str(pipeline_state["start_time"])},
+                "recent_alerts":    _recent_alerts[-20:],
+                "recent_responses": _recent_responses[-10:],
+                "active_chains":    [], "blocked_ips": [],
+                "traffic_point":    _traffic_history[-1] if _traffic_history else None,
+                "traffic_history":  _traffic_history[-60:],
+                "stats": {}, "mitre_coverage": {}, "ueba_alerts": [], "honeypot_events": [],
+            }
+            try: payload["active_chains"]   = correlation_engine.get_active_chains()
+            except Exception: pass
+            try: payload["blocked_ips"]     = responder.registry.get_all()
+            except Exception: pass
+            try: payload["mitre_coverage"]  = mitre_mapper.get_coverage_summary(_recent_alerts)
+            except Exception: pass
+            try: payload["ueba_alerts"]     = ueba_engine.get_alerts(10)
+            except Exception: pass
+            try: payload["honeypot_events"] = honeypot_mgr.get_alerts(5)
+            except Exception: pass
+            try:
+                payload["stats"] = {
+                    **reporter.get_stats(),
+                    "responder":    responder.stats,
+                    "correlator":   correlation_engine.stats,
+                    "detector_sig": sig_detector.stats,
+                    "detector_ml":  anomaly_detector.status,
+                    "active_flows": flow_aggregator.active_flow_count(),
+                    "cases":        case_manager.stats(),
+                    "ueba":         ueba_engine.stats,
+                    "honeypot":     honeypot_mgr.stats,
+                    "ioc":          ioc_manager.get_stats(),
+                }
+            except Exception: pass
+            await manager.broadcast(payload)
+        except Exception as e:
+            logger.warning(f"broadcast_loop error: {e}")
+
 
 @app.on_event("startup")
 async def startup():
@@ -327,6 +353,31 @@ async def startup():
             logger.info("Syslog server started on startup (UDP/TCP :5514, WinLog :5515)")
     except Exception as _e:
         logger.warning(f"Syslog auto-start: {_e}")
+    # ── Auto-start live capture pipeline ────────────────────────────────────
+    from capture.sniffer import ROOT_OK as _ROOT_OK, SCAPY_OK as _SCAPY_OK
+    iface = CONFIG.get("system", {}).get("interface", "auto")
+    if _ROOT_OK:
+        pipeline_state.update(running=True, mode="live", interface=iface, start_time=time.time())
+        def _start_capture():
+            try:
+                from capture.sniffer import LiveSniffer as _LS
+                _LS(interface=iface, callback=_on_packet).start()
+            except Exception as e:
+                logger.error(f"Live capture failed: {e}")
+                pipeline_state["running"] = False
+        import threading as _t
+        _t.Thread(target=_start_capture, daemon=True, name="cap-main").start()
+        logger.info(f"Live capture auto-started on interface: {iface}")
+    else:
+        logger.warning(
+            "═══════════════════════════════════════════════════════════════\n"
+            "  CyberRemedy is NOT running as root.\n"
+            "  Live packet capture is DISABLED.\n"
+            "  Restart with:  sudo python3 main.py\n"
+            "  Or set capability:  sudo setcap cap_net_raw+eip $(which python3)\n"
+            "═══════════════════════════════════════════════════════════════"
+        )
+        pipeline_state.update(running=False, mode="error:not_root")
     logger.info("CyberRemedy SOC PLATFORM v1.0 API started")
 
 @app.on_event("shutdown")
@@ -338,17 +389,32 @@ async def shutdown():
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
     await manager.connect(ws)
-    await ws.send_text(json.dumps({
-        "type": "init", "version": "4.0.0",
-        "mitre_db": mitre_mapper.get_all_techniques(),
-        "recent_alerts": _recent_alerts[-50:],
-        "traffic_history": _traffic_history[-60:],
-        "blocked_ips": responder.registry.get_all(),
-        "active_chains": correlation_engine.get_active_chains(),
-        "playbooks": playbook_engine.get_playbooks(),
-        "sigma_rules": sigma_engine.get_rules(),
-        "yara_rules": yara_scanner.get_results(),
-    }, default=str))
+    logger.info(f"WS client connected: {ws.client}")
+    try:
+        init_msg = {
+            "type": "init", "version": "2.0.0",
+            "recent_alerts": _recent_alerts[-50:],
+            "traffic_history": _traffic_history[-60:],
+            "blocked_ips": [], "active_chains": [],
+            "playbooks": [], "sigma_rules": [], "yara_rules": [], "mitre_db": [],
+        }
+        try: init_msg["blocked_ips"]   = responder.registry.get_all()
+        except Exception as e: logger.warning(f"WS init blocked_ips: {e}")
+        try: init_msg["active_chains"] = correlation_engine.get_active_chains()
+        except Exception as e: logger.warning(f"WS init chains: {e}")
+        try: init_msg["playbooks"]     = playbook_engine.get_playbooks()
+        except Exception as e: logger.warning(f"WS init playbooks: {e}")
+        try: init_msg["sigma_rules"]   = sigma_engine.get_rules()
+        except Exception as e: logger.warning(f"WS init sigma: {e}")
+        try: init_msg["yara_rules"]    = yara_scanner.get_results()
+        except Exception as e: logger.warning(f"WS init yara: {e}")
+        try: init_msg["mitre_db"]      = mitre_mapper.get_all_techniques()
+        except Exception as e: logger.warning(f"WS init mitre: {e}")
+        await ws.send_text(json.dumps(init_msg, default=str))
+        logger.info("WS init sent OK")
+    except Exception as e:
+        logger.error(f"WS init FAILED: {e}", exc_info=True)
+        manager.disconnect(ws); return
     try:
         while True:
             msg = json.loads(await ws.receive_text())
@@ -356,16 +422,29 @@ async def websocket_endpoint(ws: WebSocket):
             if cmd == "ping":
                 await ws.send_text(json.dumps({"type": "pong"}))
             elif cmd == "manual_block":
-                e = responder.manual_block(msg["ip"], reason="Dashboard manual block")
-                await ws.send_text(json.dumps({"type": "block_result", "entry": e}, default=str))
+                entry = responder.manual_block(msg["ip"], reason="Dashboard manual block")
+                await ws.send_text(json.dumps({"type": "block_result", "entry": entry}, default=str))
             elif cmd == "manual_unblock":
-                e = responder.manual_unblock(msg["ip"])
-                await ws.send_text(json.dumps({"type": "unblock_result", "entry": e}, default=str))
+                entry = responder.manual_unblock(msg["ip"])
+                await ws.send_text(json.dumps({"type": "unblock_result", "entry": entry}, default=str))
             elif cmd == "run_playbook":
                 r = playbook_engine.execute_playbook(msg["playbook_id"], msg.get("alert", {}))
                 await ws.send_text(json.dumps({"type": "playbook_result", "result": r}, default=str))
-    except WebSocketDisconnect:
+            elif cmd == "save_settings":
+                # Apply settings live without restart
+                settings = msg.get("settings", {})
+                try:
+                    if "detection_threshold" in settings:
+                        sig_detector.threshold = int(settings["detection_threshold"])
+                    if "auto_block" in settings:
+                        responder.auto_block = bool(settings["auto_block"])
+                    await ws.send_text(json.dumps({"type": "settings_saved", "ok": True}))
+                except Exception as se:
+                    await ws.send_text(json.dumps({"type": "settings_saved", "ok": False, "error": str(se)}))
+    except (WebSocketDisconnect, Exception) as e:
+        logger.info(f"WS disconnected: {e}")
         manager.disconnect(ws)
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # ORIGINAL PIPELINE ENDPOINTS
@@ -374,7 +453,7 @@ async def websocket_endpoint(ws: WebSocket):
 @app.get("/api/status")
 def get_status():
     return {
-        "version": "4.0.0", "pipeline": pipeline_state,
+        "version": "1.0.0", "pipeline": pipeline_state,
         "uptime_seconds": time.time()-pipeline_state["start_time"] if pipeline_state["start_time"] else 0,
         "components": {
             "signature_detector": "ready",
@@ -385,8 +464,8 @@ def get_status():
             "ioc_manager": f"{ioc_manager.get_stats()['total_iocs']} IOCs",
             "ueba": "active" if ueba_engine.is_active else "learning",
             "honeypot": "active" if honeypot_mgr.running else "stopped",
-            "sigma": f"{sigma_engine.stats().get('total_rules',0)()} rules",
-            "yara": f"{yara_scanner.stats().get('total_rules',0)()} rules",
+            "sigma": f"{sigma_engine.stats.get('total_rules', 0)} rules",
+            "yara": f"{yara_scanner.stats.get('total_rules',0)} rules",
         },
     }
 
@@ -446,22 +525,29 @@ async def restart_pipeline():
         try:
             sniffer.start()
             pipeline_state["running"] = True
-            pipeline_state["mode"] = "live" if sniffer.live else "simulation"
+            pipeline_state["mode"] = "live"
         except Exception as e:
             pipeline_state["running"] = True
-            pipeline_state["mode"] = "simulation"
+            pipeline_state["mode"] = "stopped"
     asyncio.create_task(_restart())
     return {"restarting": True, "message": "Pipeline restarting in 1.5s"}
 
 @app.post("/api/pipeline/start")
-def start_pipeline(bg: BackgroundTasks, mode: str="simulation", interface: str="eth0"):
-    if pipeline_state["running"]: return {"status": "already_running"}
-    pipeline_state.update(running=True, mode=mode, interface=interface, start_time=time.time())
+def start_pipeline(bg: BackgroundTasks, interface: str = "auto"):
+    """Start live packet capture. Requires root/sudo."""
+    from capture.sniffer import ROOT_OK as _ROOT_OK
+    if pipeline_state["running"]: return {"status": "already_running", "mode": "live"}
+    if not _ROOT_OK:
+        return {"status": "error", "detail": "Not running as root. Restart with: sudo python3 main.py"}
+    iface = interface if interface != "auto" else CONFIG.get("system", {}).get("interface", "auto")
+    pipeline_state.update(running=True, mode="live", interface=iface, start_time=time.time())
     def run():
-        try: LiveSniffer(interface=interface, callback=_on_packet).start()
-        except Exception as e: logger.error(f"Pipeline: {e}"); pipeline_state["running"]=False
+        try: LiveSniffer(interface=iface, callback=_on_packet).start()
+        except Exception as e:
+            logger.error(f"Pipeline: {e}")
+            pipeline_state.update(running=False, mode=f"error:{e}")
     threading.Thread(target=run, daemon=True).start()
-    return {"status": "started", "mode": mode}
+    return {"status": "started", "mode": "live", "interface": iface}
 
 @app.post("/api/pipeline/stop")
 def stop_pipeline():
@@ -485,7 +571,7 @@ def get_stats():
     return {"reporter": reporter.get_stats(), "responder": responder.stats,
             "correlator": correlation_engine.stats, "signature": sig_detector.stats,
             "anomaly": anomaly_detector.status, "pipeline": pipeline_state,
-            "cases": case_manager.stats(), "ueba": ueba_engine.stats(), "ioc": ioc_manager.get_stats()}
+            "cases": case_manager.stats(), "ueba": ueba_engine.stats, "ioc": ioc_manager.get_stats()}
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CASE MANAGEMENT
@@ -571,7 +657,7 @@ def intel_stats(): return ioc_manager.get_stats()
 
 @app.get("/api/intel/iocs")
 def list_iocs(ioc_type: str=None, limit: int=200):
-    return {"iocs": ioc_manager.list(ioc_type=ioc_type, limit=limit)}
+    return {"iocs": ioc_manager.get_all(limit=limit)}
 
 @app.post("/api/intel/iocs")
 def add_ioc(req: IOCReq):
@@ -596,7 +682,7 @@ def delete_ioc(indicator: str):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @app.get("/api/ueba/stats")
-def ueba_stats(): return ueba_engine.stats()
+def ueba_stats(): return ueba_engine.stats
 
 @app.get("/api/ueba/anomalies")
 def ueba_anomalies(limit: int=50): return {"anomalies": ueba_engine.get_alerts(limit)}
@@ -639,7 +725,7 @@ def run_playbook(pb_id: str, req: RunPBReq):
     return {"result": r}
 
 @app.get("/api/playbooks/history")
-def playbook_history(limit: int=50): return {"history": playbook_engine.execution_history(limit)}
+def playbook_history(limit: int=50): return {"history": playbook_engine.get_executions(limit)}
 
 @app.patch("/api/playbooks/{pb_id}/enable")
 def toggle_playbook(pb_id: str, enabled: bool=True):
@@ -666,7 +752,7 @@ def list_yara():
         "rules": [{"name": n, "source": "built-in", "status": "active"} for n in rule_names],
         "rule_count": len(rule_names),
         "recent_hits": yara_scanner.get_results(20),
-        "stats": yara_scanner.stats() if hasattr(yara_scanner.stats,'__call__') else {},
+        "stats": yara_scanner.stats,
     }
 
 @app.post("/api/yara/rules")
@@ -682,7 +768,7 @@ def yara_scan(req: YaraScanReq):
     return {"matches": m, "hit_count": len(m)}
 
 @app.get("/api/yara/stats")
-def yara_stats(): return yara_scanner.stats()
+def yara_stats(): return yara_scanner.stats
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # SIGMA
@@ -692,7 +778,7 @@ class SigmaImportReq(BaseModel):
     yaml_content: str; source: str="manual"
 
 @app.get("/api/sigma/rules")
-def list_sigma(): return {"rules": sigma_engine.get_rules(), "count": sigma_engine.stats().get('total_rules',0)()}
+def list_sigma(): return {"rules": sigma_engine.get_rules(), "count": sigma_engine.stats.get('total_rules', 0)}
 
 @app.post("/api/sigma/import")
 def import_sigma(req: SigmaImportReq):
@@ -704,7 +790,7 @@ def eval_sigma(event: dict):
     return {"hits": hits, "match_count": len(hits)}
 
 @app.get("/api/sigma/stats")
-def sigma_stats(): return sigma_engine.stats()
+def sigma_stats(): return sigma_engine.stats
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # HONEYPOT
@@ -715,7 +801,7 @@ def honeypot_status(): return honeypot_mgr.get_status()
 
 @app.get("/api/honeypot/events")
 def honeypot_events(limit: int=100):
-    return {"events": honeypot_mgr.get_alerts(limit), "stats": honeypot_mgr.stats()}
+    return {"events": honeypot_mgr.get_alerts(limit), "stats": honeypot_mgr.stats}
 
 @app.post("/api/honeypot/start")
 def start_honeypot(services: List[str]=None):
@@ -832,7 +918,7 @@ if __name__ == "__main__":
                 port=cfg.get("port",8000), reload=False, log_level="info")
 
 # ═════════════════════════════════════════════════════════════════════════════
-# v4.0 ENDPOINTS
+# v1.0 ENDPOINTS
 # ═════════════════════════════════════════════════════════════════════════════
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -969,6 +1055,287 @@ def label_asset(req: LabelReq):
 @app.get("/api/geoip/{ip}")
 def geo_lookup(ip: str): return geoip.lookup(ip)
 
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ATTACKER SOURCE TRACKING — /api/tracker/{ip}
+# Aggregates all available intel on an IP: GeoIP, WHOIS/RDAP, reverse DNS,
+# Shodan InternetDB, alert history, and attack chain membership.
+# All lookups use free, key-less public APIs with a 10s timeout per source.
+# ══════════════════════════════════════════════════════════════════════════════
+
+import urllib.request as _urllib_req
+import urllib.error  as _urllib_err
+
+def _tracker_fetch(url: str, timeout: int = 8) -> dict:
+    """Fetch JSON from a URL, return {} on any error."""
+    try:
+        req = _urllib_req.Request(url, headers={"User-Agent": "CyberRemedy/1.0"})
+        with _urllib_req.urlopen(req, timeout=timeout) as r:
+            import json as _j
+            return _j.loads(r.read().decode("utf-8", errors="replace"))
+    except Exception:
+        return {}
+
+def _tracker_fetch_text(url: str, timeout: int = 8) -> str:
+    """Fetch plain text from a URL, return "" on any error."""
+    try:
+        req = _urllib_req.Request(url, headers={"User-Agent": "CyberRemedy/1.0"})
+        with _urllib_req.urlopen(req, timeout=timeout) as r:
+            return r.read().decode("utf-8", errors="replace")
+    except Exception:
+        return ""
+
+def _reverse_dns(ip: str) -> str:
+    """PTR record lookup — no external HTTP needed."""
+    import socket as _sock
+    try:
+        return _sock.gethostbyaddr(ip)[0]
+    except Exception:
+        return ""
+
+def _build_ip_profile(ip: str) -> dict:
+    """
+    Collect everything known about an IP from all available sources.
+    Returns a unified profile dict.
+    """
+    import concurrent.futures as _cf
+    import json as _j
+
+    profile: dict = {"ip": ip, "sources": {}}
+
+    # ── Source 1: ip-api.com (ISP, ASN, city, proxy/VPN detection) ──────────
+    def _ipapi():
+        fields = "status,message,country,countryCode,region,regionName,city,zip,lat,lon,timezone,isp,org,as,asname,reverse,mobile,proxy,hosting,query"
+        d = _tracker_fetch(f"http://ip-api.com/json/{ip}?fields={fields}")
+        if d.get("status") == "success":
+            return {
+                "country":      d.get("country",""),
+                "country_code": d.get("countryCode",""),
+                "region":       d.get("regionName",""),
+                "city":         d.get("city",""),
+                "lat":          d.get("lat", 0),
+                "lon":          d.get("lon", 0),
+                "isp":          d.get("isp",""),
+                "org":          d.get("org",""),
+                "as_number":    d.get("as",""),
+                "as_name":      d.get("asname",""),
+                "timezone":     d.get("timezone",""),
+                "reverse_dns":  d.get("reverse",""),
+                "is_mobile":    d.get("mobile", False),
+                "is_proxy":     d.get("proxy", False),
+                "is_hosting":   d.get("hosting", False),
+            }
+        return {}
+
+    # ── Source 2: Shodan InternetDB (open ports, vulns, tags) ───────────────
+    def _shodan():
+        d = _tracker_fetch(f"https://internetdb.shodan.io/{ip}")
+        return {
+            "open_ports":  d.get("ports", []),
+            "hostnames":   d.get("hostnames", []),
+            "tags":        d.get("tags", []),
+            "cpes":        d.get("cpes", []),
+            "vulns":       d.get("vulns", []),
+        } if d and "detail" not in d else {}
+
+    # ── Source 3: RDAP / ARIN WHOIS ─────────────────────────────────────────
+    def _rdap():
+        # Try ARIN first, fall back to RDAP bootstrap
+        d = _tracker_fetch(f"https://rdap.arin.net/registry/ip/{ip}")
+        if not d:
+            d = _tracker_fetch(f"https://rdap.db.ripe.net/ip/{ip}")
+        if not d:
+            return {}
+        result = {}
+        # Org name
+        entities = d.get("entities", [])
+        for ent in entities:
+            vcard = ent.get("vcardArray", [])
+            if isinstance(vcard, list) and len(vcard) > 1:
+                for item in vcard[1]:
+                    if isinstance(item, list) and item[0] == "fn":
+                        result["whois_org"] = item[3]
+                        break
+            roles = ent.get("roles", [])
+            if "abuse" in roles:
+                # Extract abuse email
+                for item in (vcard[1] if len(vcard)>1 else []):
+                    if isinstance(item, list) and item[0] == "email":
+                        result["abuse_email"] = item[3]
+                        break
+        # Network range
+        result["net_handle"]  = d.get("handle","")
+        result["net_name"]    = d.get("name","")
+        result["net_type"]    = d.get("type","")
+        result["start_addr"]  = d.get("startAddress","")
+        result["end_addr"]    = d.get("endAddress","")
+        result["reg_date"]    = d.get("events",[{}])[0].get("eventDate","") if d.get("events") else ""
+        return result
+
+    # ── Source 4: AbuseIPDB check (public, no key for basic info) ───────────
+    def _abuse_check():
+        # Use the free ipwho.is as alternative enrichment
+        d = _tracker_fetch(f"https://ipwho.is/{ip}")
+        if d.get("success"):
+            return {
+                "connection_type": d.get("connection", {}).get("type",""),
+                "isp_org":         d.get("connection", {}).get("org",""),
+                "isp_domain":      d.get("connection", {}).get("domain",""),
+                "asn":             d.get("connection", {}).get("asn",""),
+            }
+        return {}
+
+    # ── Source 5: Reverse DNS ────────────────────────────────────────────────
+    def _rdns():
+        hostname = _reverse_dns(ip)
+        return {"ptr_record": hostname} if hostname else {}
+
+    # ── Run all lookups in parallel (max 10s total) ──────────────────────────
+    with _cf.ThreadPoolExecutor(max_workers=5) as ex:
+        futures = {
+            "geo":     ex.submit(_ipapi),
+            "shodan":  ex.submit(_shodan),
+            "rdap":    ex.submit(_rdap),
+            "ipwho":   ex.submit(_abuse_check),
+            "rdns":    ex.submit(_rdns),
+        }
+        for name, fut in futures.items():
+            try:
+                profile["sources"][name] = fut.result(timeout=10)
+            except Exception:
+                profile["sources"][name] = {}
+
+    # ── Source 6: Local alert history ────────────────────────────────────────
+    ip_alerts = [a for a in _recent_alerts if a.get("src_ip") == ip]
+    if ip_alerts:
+        attack_types = {}
+        for a in ip_alerts:
+            t = a.get("type","unknown")
+            attack_types[t] = attack_types.get(t, 0) + 1
+        profile["sources"]["history"] = {
+            "total_alerts":    len(ip_alerts),
+            "first_seen":      min(a.get("timestamp","") for a in ip_alerts),
+            "last_seen":       max(a.get("timestamp","") for a in ip_alerts),
+            "attack_types":    attack_types,
+            "max_severity":    max(
+                ("CRITICAL","HIGH","MEDIUM","LOW").index(a.get("severity","LOW"))
+                for a in ip_alerts
+            ),
+            "severities":      {s: sum(1 for a in ip_alerts if a.get("severity")==s)
+                                 for s in ("CRITICAL","HIGH","MEDIUM","LOW")},
+            "mitre_ids":       list({a.get("mitre_id","") for a in ip_alerts if a.get("mitre_id")}),
+            "is_blocked":      ip in (responder.registry.get_all() if hasattr(responder,"registry") else {}),
+        }
+
+    # ── Source 7: Attack chain membership ────────────────────────────────────
+    ip_chains = [c for c in _recent_chains if c.get("src_ip") == ip]
+    if ip_chains:
+        profile["sources"]["chains"] = {
+            "chain_count":  len(ip_chains),
+            "chain_ids":    [c.get("id","") for c in ip_chains],
+            "stages":       list({s for c in ip_chains for s in c.get("stages",[])}),
+            "total_events": sum(c.get("event_count",0) for c in ip_chains),
+        }
+
+    # ── Threat verdict ────────────────────────────────────────────────────────
+    geo     = profile["sources"].get("geo", {})
+    shodan  = profile["sources"].get("shodan", {})
+    history = profile["sources"].get("history", {})
+    rdap    = profile["sources"].get("rdap", {})
+
+    threat_score = 0
+    threat_reasons = []
+
+    if geo.get("is_proxy"):
+        threat_score += 30; threat_reasons.append("VPN/Proxy detected")
+    if geo.get("is_hosting"):
+        threat_score += 20; threat_reasons.append("Hosting/datacenter IP")
+    if geo.get("country_code","") in CONFIG.get("geoip",{}).get("high_risk_countries",["CN","RU","KP","IR"]):
+        threat_score += 25; threat_reasons.append(f"High-risk country ({geo.get('country','')})")
+    if shodan.get("vulns"):
+        threat_score += 20; threat_reasons.append(f"{len(shodan['vulns'])} known CVEs on this host")
+    if history.get("total_alerts",0) > 5:
+        threat_score += 15; threat_reasons.append(f"{history['total_alerts']} alerts in session")
+    if history.get("attack_types",{}):
+        types = list(history["attack_types"].keys())
+        if len(types) > 2:
+            threat_score += 10; threat_reasons.append("Multiple attack types used")
+    if ip_chains:
+        threat_score += 20; threat_reasons.append("Part of multi-stage attack chain")
+    if shodan.get("tags") and any(t in ["tor","vpn","scanner","malware"] for t in shodan["tags"]):
+        threat_score += 35; threat_reasons.append(f"Shodan tags: {shodan['tags']}")
+    if shodan.get("open_ports"):
+        if any(p in [22,23,3389,445,1433] for p in shodan.get("open_ports",[])):
+            threat_score += 10; threat_reasons.append("Attack-capable services on attacker host")
+
+    threat_score = min(100, threat_score)
+    if threat_score >= 70:   verdict = "CONFIRMED THREAT"
+    elif threat_score >= 45: verdict = "LIKELY THREAT"
+    elif threat_score >= 20: verdict = "SUSPICIOUS"
+    else:                    verdict = "UNKNOWN / LOW CONFIDENCE"
+
+    profile["verdict"] = {
+        "score":   threat_score,
+        "label":   verdict,
+        "reasons": threat_reasons,
+    }
+
+    # ── Flat summary for quick display ───────────────────────────────────────
+    profile["summary"] = {
+        "ip":          ip,
+        "flag":        geoip.lookup(ip).get("flag","🌐") if ip else "🌐",
+        "country":     geo.get("country","Unknown"),
+        "city":        geo.get("city",""),
+        "isp":         geo.get("isp","") or geo.get("org",""),
+        "org":         rdap.get("whois_org","") or geo.get("org",""),
+        "asn":         geo.get("as_number",""),
+        "ptr":         profile["sources"].get("rdns",{}).get("ptr_record",""),
+        "is_proxy":    geo.get("is_proxy", False),
+        "is_hosting":  geo.get("is_hosting", False),
+        "open_ports":  shodan.get("open_ports",[]),
+        "vulns":       shodan.get("vulns",[]),
+        "tags":        shodan.get("tags",[]),
+        "net_range":   f"{rdap.get('start_addr','')} – {rdap.get('end_addr','')}",
+        "abuse_email": rdap.get("abuse_email",""),
+        "total_alerts":history.get("total_alerts",0),
+        "verdict":     verdict,
+        "verdict_score": threat_score,
+    }
+
+    return profile
+
+
+@app.get("/api/tracker/{ip}")
+async def track_ip(ip: str):
+    """
+    Full attacker source profile for a given IP.
+    Queries ip-api.com, Shodan InternetDB, RDAP/WHOIS, reverse DNS,
+    local alert history, and attack chains in parallel.
+    Returns within ~10 seconds.
+    """
+    import re as _re
+    # Validate IP format
+    if not _re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", ip):
+        raise HTTPException(status_code=400, detail="Invalid IP address format")
+    return _build_ip_profile(ip)
+
+
+@app.get("/api/tracker/{ip}/quick")
+async def track_ip_quick(ip: str):
+    """Returns only local data (no external API calls) — instant response."""
+    ip_alerts = [a for a in _recent_alerts if a.get("src_ip") == ip]
+    ip_chains  = [c for c in _recent_chains if c.get("src_ip") == ip]
+    geo        = geoip.lookup(ip) if ip else {}
+    return {
+        "ip":          ip,
+        "geo":         geo,
+        "alert_count": len(ip_alerts),
+        "chain_count": len(ip_chains),
+        "is_blocked":  ip in (responder.registry.get_all() if hasattr(responder,"registry") else {}),
+        "attack_types": list({a.get("type","") for a in ip_alerts}),
+        "mitre_ids":    list({a.get("mitre_id","") for a in ip_alerts if a.get("mitre_id")}),
+    }
+
 @app.get("/api/map")
 def get_map(limit: int=200):
     return {"points": geoip.get_map_data(_recent_alerts, limit=limit),
@@ -1024,7 +1391,82 @@ except Exception as _e:
 
 @app.get("/api/syslog/stats")
 def syslog_stats():
-    return {"count": _syslog_srv.count if _syslog_srv else 0, "running": _syslog_srv is not None}
+    import socket as _sock
+    try: server_ip = _sock.gethostbyname(_sock.gethostname())
+    except Exception: server_ip = "127.0.0.1"
+    base = {"running": _syslog_srv is not None, "server_ip": server_ip,
+            "udp_port": 5514, "winlog_port": 5515, "agent_port": 5516}
+    if _syslog_srv:
+        try:
+            s = _syslog_srv.get_stats() if hasattr(_syslog_srv, "get_stats") else {}
+            base.update(s)
+        except Exception:
+            base["total"] = getattr(_syslog_srv, "count", 0)
+    return base
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PACKET ANALYZER  — Wireshark-style deep packet analysis with ML
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.get("/api/packets/flows")
+def get_analyzed_flows(
+    limit: int = 200,
+    severity: str = "",
+    protocol: str = "",
+    direction: str = "",
+    threat_only: bool = False
+):
+    """Get analyzed network flows with ML classification."""
+    return {
+        "flows": _packet_analyzer.get_flows(
+            limit=limit,
+            severity_filter=severity or None,
+            protocol_filter=protocol or None,
+            direction_filter=direction or None,
+            threat_only=threat_only,
+        )
+    }
+
+@app.get("/api/packets/active")
+def get_active_flows(limit: int = 100):
+    """Get currently active (incomplete) flows — real-time view."""
+    return {"flows": _packet_analyzer.get_active_flows(limit=limit)}
+
+@app.get("/api/packets/stats")
+def get_packet_stats():
+    """Get packet analyzer statistics + ML training status."""
+    return _packet_analyzer.stats
+
+@app.get("/api/packets/summary")
+def get_packet_summary():
+    """Get high-level summary for dashboard cards."""
+    s = _packet_analyzer.stats
+    completed = _packet_analyzer.get_flows(limit=500)
+    top_talkers = {}
+    top_services = {}
+    for f in completed:
+        ip = f.get('src_ip','')
+        if ip: top_talkers[ip] = top_talkers.get(ip, 0) + f.get('byte_count', 0)
+        svc = f.get('service','OTHER')
+        top_services[svc] = top_services.get(svc, 0) + 1
+    top_talkers_list = sorted(top_talkers.items(), key=lambda x: x[1], reverse=True)[:10]
+    top_services_list = sorted(top_services.items(), key=lambda x: x[1], reverse=True)[:10]
+    return {
+        "total_packets":  s.get('total_packets', 0),
+        "total_bytes":    s.get('total_bytes', 0),
+        "total_flows":    s.get('total_flows', 0),
+        "active_flows":   s.get('active_flows', 0),
+        "threats":        s.get('threats', 0),
+        "anomalies":      s.get('anomalies', 0),
+        "ml_trained":     s.get('ml_trained', False),
+        "training_progress": min(100, int(s.get('training_samples', 0) / 2)),
+        "by_protocol":    s.get('by_protocol', {}),
+        "by_direction":   s.get('by_direction', {}),
+        "by_l7":          s.get('by_l7', {}),
+        "top_talkers":    [{"ip": ip, "bytes": b} for ip, b in top_talkers_list],
+        "top_services":   [{"service": sv, "count": ct} for sv, ct in top_services_list],
+    }
 
 # ── Reports list ──────────────────────────────────────────────────────────────
 @app.get("/api/report/list")
@@ -1046,6 +1488,64 @@ def test_email():
         return {"sent": False, "error": str(e)}
 
 # ── API Docs redirect ─────────────────────────────────────────────────────────
+@app.get("/api/settings")
+def get_settings():
+    import yaml
+    cfg_path = Path(__file__).parent.parent / "config" / "settings.yaml"
+    try:
+        with open(cfg_path) as f: cfg = yaml.safe_load(f) or {}
+    except Exception: cfg = {}
+    return {
+        "capture_interface": cfg.get("capture", {}).get("interface", "auto"),
+        "detection_threshold": cfg.get("detection", {}).get("threshold", 70),
+        "auto_block": cfg.get("response", {}).get("auto_block", False),
+        "auto_block_threshold": cfg.get("response", {}).get("auto_block_threshold", 85),
+        "syslog_port": cfg.get("syslog", {}).get("port", 5514),
+        "alert_email": cfg.get("notifications", {}).get("email", ""),
+        "interfaces": _get_interfaces(),
+        "pipeline": pipeline_state,
+    }
+
+def _get_interfaces():
+    import subprocess, re as _re
+    ifaces = ["auto"]
+    try:
+        out = subprocess.check_output(["ip", "-o", "link", "show"], text=True, timeout=3)
+        for m in _re.finditer(r"\d+: ([\w@.-]+):", out):
+            i = m.group(1).split("@")[0]
+            if i not in ("lo", "docker0") and not i.startswith(("veth","br-")):
+                ifaces.append(i)
+    except Exception: pass
+    return ifaces
+
+@app.post("/api/settings")
+async def save_settings(req: Request):
+    import yaml
+    body = await req.json()
+    cfg_path = Path(__file__).parent.parent / "config" / "settings.yaml"
+    try:
+        with open(cfg_path) as f: cfg = yaml.safe_load(f) or {}
+    except Exception: cfg = {}
+    # Apply live (no restart needed for these)
+    if "detection_threshold" in body:
+        try: sig_detector.threshold = int(body["detection_threshold"])
+        except Exception: pass
+    if "auto_block" in body:
+        try: responder.auto_block = bool(body["auto_block"])
+        except Exception: pass
+    # Save to disk
+    cfg.setdefault("detection", {})["threshold"] = body.get("detection_threshold", 70)
+    cfg.setdefault("response", {})["auto_block"] = body.get("auto_block", False)
+    cfg.setdefault("response", {})["auto_block_threshold"] = body.get("auto_block_threshold", 85)
+    cfg.setdefault("capture", {})["interface"] = body.get("capture_interface", "auto")
+    cfg.setdefault("notifications", {})["email"] = body.get("alert_email", "")
+    try:
+        with open(cfg_path, "w") as f: yaml.dump(cfg, f)
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+    return {"ok": True, "message": "Settings saved. Interface changes require restart."}
+
+
 @app.get("/docs/api")
 def api_docs_redirect():
     from fastapi.responses import RedirectResponse

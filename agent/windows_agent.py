@@ -1,6 +1,6 @@
 """
-AID-ARS v4.0 — Windows Event Log Agent
-Run on Windows machines to ship event logs to AID-ARS server.
+CyberRemedy v1.0 — Windows Event Log Agent
+Run on Windows machines to ship event logs to CyberRemedy server.
 Usage: python windows_agent.py --server 192.168.1.100 --port 5515
 """
 import json, socket, time, threading, argparse, sys, platform
@@ -104,7 +104,7 @@ def send_events(events, server, port):
 
 
 def main():
-    p = argparse.ArgumentParser(description="AID-ARS Event Log Agent")
+    p = argparse.ArgumentParser(description="CyberRemedy Event Log Agent")
     p.add_argument("--server", default="127.0.0.1")
     p.add_argument("--port", type=int, default=5515)
     p.add_argument("--interval", type=int, default=30, help="Seconds between polls")

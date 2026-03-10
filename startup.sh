@@ -4,7 +4,7 @@
 cd "$(dirname "$0")"
 
 echo "========================================="
-echo "  AID-ARS v4.0 — AI SIEM Platform"
+echo "  CyberRemedy v1.0 — AI SIEM Platform"
 echo "========================================="
 echo ""
 echo "Dashboard:    http://localhost:8000"

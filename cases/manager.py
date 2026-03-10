@@ -1,5 +1,5 @@
 """
-AID-ARS Case Management System
+CyberRemedy Case Management System
 Inspired by Security Onion Cases + Elastic Security Cases.
 Full lifecycle: Open → Investigating → Pending Review → Closed
 Features: alert attachment, analyst assignment, comments, evidence, SLA tracking.
@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional
 
-logger = logging.getLogger("aidars.cases")
+logger = logging.getLogger("cyberremedy.cases")
 
 CASES_DB_PATH = Path("data/cases.json")
 

@@ -7,7 +7,6 @@ Usage:
   python main.py --port 9000        # Custom port
   python main.py --host 127.0.0.1   # Bind to localhost only
   python main.py --train            # Train ML models
-  python main.py --test             # Run test suite
 """
 import argparse, logging, logging.handlers, sys, os
 from pathlib import Path
@@ -70,10 +69,14 @@ def download_geoip():
 
     # Try multiple free sources (no account or key needed)
     sources = [
-        # ip-location-db (GitHub, public, no key, updated monthly)
-        "https://raw.githubusercontent.com/sapics/ip-location-db/main/country/country-ipv4.csv",
-        # dbip mirror (some months are accessible)
-        "https://raw.githubusercontent.com/sapics/ip-location-db/main/country/country-ipv4-num.csv",
+        # Primary: ip-location-db GeoIP CSV (GitHub raw, no key, updated monthly)
+        "https://raw.githubusercontent.com/sapics/ip-location-db/main/geo-whois-asn-country/geo-whois-asn-country-ipv4.csv",
+        # Fallback 1: country-only CSV from same repo
+        "https://raw.githubusercontent.com/sapics/ip-location-db/main/asn-country/asn-country-ipv4.csv",
+        # Fallback 2: dbip-country via jsdelivr CDN (very reliable)
+        "https://cdn.jsdelivr.net/npm/@ip-location-db/geo-whois-asn-country/geo-whois-asn-country-ipv4.csv",
+        # Fallback 3: country ipv4 via jsDelivr
+        "https://cdn.jsdelivr.net/npm/@ip-location-db/asn-country/asn-country-ipv4.csv",
     ]
 
     for url in sources:
@@ -112,7 +115,7 @@ def cmd_api(args):
         logger.warning(f"GeoIP setup skipped: {e}")
 
     import uvicorn
-    logger.info(f"Starting CyberRemedy v4.0 on http://{args.host}:{args.port}")
+    logger.info(f"Starting CyberRemedy v1.0 on http://{args.host}:{args.port}")
     uvicorn.run(
         "api.server:app",
         host=args.host,
@@ -153,28 +156,16 @@ def cmd_train(args):
     logger.info("Training complete — models saved to models/")
 
 
-def cmd_test(args):
-    import subprocess
-    result = subprocess.run(
-        [sys.executable, "-m", "pytest", "tests/", "-v"],
-        cwd=str(ROOT)
-    )
-    sys.exit(result.returncode)
-
 
 def main():
-    p = argparse.ArgumentParser(description="CyberRemedy v4.0 SIEM")
+    p = argparse.ArgumentParser(description="CyberRemedy v1.0 SIEM")
     p.add_argument("--host",  default="0.0.0.0")
     p.add_argument("--port",  type=int, default=8000)
     p.add_argument("--train", action="store_true", help="Train ML models and exit")
-    p.add_argument("--test",  action="store_true", help="Run test suite and exit")
-
     args = p.parse_args()
 
     if args.train:
         cmd_train(args)
-    elif args.test:
-        cmd_test(args)
     else:
         cmd_api(args)
 

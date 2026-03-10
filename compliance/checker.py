@@ -1,5 +1,5 @@
 """
-AID-ARS Compliance Checker
+CyberRemedy Compliance Checker
 Maps detection coverage and system configuration to compliance frameworks.
 Supports: PCI DSS 4.0, HIPAA Security Rule, NIST 800-53 Rev 5, CIS Controls v8.
 """
@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
-logger = logging.getLogger("aidars.compliance")
+logger = logging.getLogger("cyberremedy.compliance")
 
 COMPLIANCE_REPORT_PATH = Path("data/compliance_reports.json")
 
