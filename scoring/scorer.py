@@ -1,5 +1,5 @@
 """
-AID-ARS Threat Scoring Engine
+CyberRemedy Threat Scoring Engine
 Assigns a risk score 0-100 to each alert based on
 confidence, severity, attack type, and asset impact.
 """
@@ -7,7 +7,7 @@ confidence, severity, attack type, and asset impact.
 import logging
 from typing import Optional
 
-logger = logging.getLogger("aidars.scoring")
+logger = logging.getLogger("cyberremedy.scoring")
 
 # Base severity scores
 SEV_BASE = {"CRITICAL": 85, "HIGH": 65, "MEDIUM": 40, "LOW": 15}
@@ -90,8 +90,19 @@ class ThreatScorer:
         else:
             priority = "P5-INFO"
 
-        alert["risk_score"] = score
-        alert["priority"] = priority
+        # Map score back to severity so UI always matches the computed score
+        if score >= 80:
+            severity_out = "CRITICAL"
+        elif score >= 60:
+            severity_out = "HIGH"
+        elif score >= 40:
+            severity_out = "MEDIUM"
+        else:
+            severity_out = "LOW"
+
+        alert["risk_score"]  = score
+        alert["priority"]    = priority
+        alert["severity"]    = severity_out   # overwrite with score-derived severity
         return alert
 
     def score_batch(self, alerts: list) -> list:

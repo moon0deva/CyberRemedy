@@ -1,0 +1,97 @@
+{
+  "devices": {
+    "192.168.0.1": {
+      "ip": "192.168.0.1",
+      "mac": "b4:f2:67:12:41:7b",
+      "hostname": "compalhub.home",
+      "vendor": "Unknown",
+      "label": "",
+      "first_seen": "2026-03-09T13:08:41.630411",
+      "last_seen": "2026-03-10T19:26:48.919860",
+      "open_ports": [
+        80
+      ],
+      "interface": "auto",
+      "status": "active",
+      "online": true
+    },
+    "192.168.0.45": {
+      "ip": "192.168.0.45",
+      "mac": "42:fe:b6:cb:10:63",
+      "hostname": "",
+      "vendor": "Unknown",
+      "label": "",
+      "first_seen": "2026-03-09T13:08:41.630411",
+      "last_seen": "2026-03-10T19:26:48.919860",
+      "open_ports": [],
+      "interface": "auto",
+      "status": "active",
+      "online": true
+    },
+    "192.168.0.143": {
+      "ip": "192.168.0.143",
+      "mac": "44:85:00:a5:bc:2a",
+      "hostname": "DESKTOP-0SKQGU3",
+      "vendor": "Intel",
+      "label": "",
+      "first_seen": "2026-03-09T13:08:41.630411",
+      "last_seen": "2026-03-10T19:26:48.919860",
+      "open_ports": [
+        8080
+      ],
+      "interface": "auto",
+      "status": "active",
+      "online": true
+    },
+    "192.168.0.151": {
+      "ip": "192.168.0.151",
+      "mac": "70:cd:0d:83:bd:05",
+      "hostname": "",
+      "vendor": "Unknown",
+      "label": "",
+      "first_seen": "2026-03-09T13:08:41.630411",
+      "last_seen": "2026-03-10T19:26:48.919860",
+      "open_ports": [],
+      "interface": "auto",
+      "status": "active",
+      "online": true
+    },
+    "192.168.0.220": {
+      "ip": "192.168.0.220",
+      "mac": "",
+      "hostname": "",
+      "vendor": "Unknown",
+      "label": "",
+      "first_seen": "2026-03-09T13:08:41.630411",
+      "last_seen": "2026-03-09T13:08:41.630411",
+      "open_ports": [
+        80,
+        8080
+      ],
+      "interface": "auto",
+      "status": "active",
+      "online": false
+    },
+    "192.168.0.150": {
+      "ip": "192.168.0.150",
+      "mac": "0a:d5:e5:5c:ef:0c",
+      "hostname": "",
+      "vendor": "Unknown",
+      "label": "",
+      "first_seen": "2026-03-09T16:24:06.226788",
+      "last_seen": "2026-03-10T19:15:46.734018",
+      "open_ports": [],
+      "interface": "auto",
+      "status": "active",
+      "online": true
+    }
+  },
+  "known_macs": [
+    "b4:f2:67:12:41:7b",
+    "42:fe:b6:cb:10:63",
+    "44:85:00:a5:bc:2a",
+    "70:cd:0d:83:bd:05",
+    "0a:d5:e5:5c:ef:0c"
+  ],
+  "labels": {}
+}

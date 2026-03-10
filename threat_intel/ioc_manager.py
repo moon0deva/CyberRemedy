@@ -1,5 +1,5 @@
 """
-AID-ARS Threat Intelligence — IOC Manager
+CyberRemedy Threat Intelligence — IOC Manager
 Ingests and manages Indicators of Compromise from:
   - VirusTotal API (hash/IP/domain lookups)
   - MISP event feeds
@@ -20,7 +20,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
-logger = logging.getLogger("aidars.threat_intel")
+logger = logging.getLogger("cyberremedy.threat_intel")
 
 IOC_STORE_PATH = Path("data/ioc_store.json")
 IOC_CACHE_PATH = Path("data/vt_cache.json")

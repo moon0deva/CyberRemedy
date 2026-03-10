@@ -1,5 +1,5 @@
 """
-AID-ARS Sigma Engine — Sigma 2.0 Rule Parser & Executor
+CyberRemedy Sigma Engine — Sigma 2.0 Rule Parser & Executor
 Parses Sigma YAML rules and evaluates them against log events.
 Supports: YAML loading, field mapping, condition evaluation, alert generation.
 """
@@ -18,14 +18,14 @@ try:
 except ImportError:
     YAML_AVAILABLE = False
 
-logger = logging.getLogger("aidars.sigma")
+logger = logging.getLogger("cyberremedy.sigma")
 
 SIGMA_RULES_DIR = Path("data/sigma_rules")
 SIGMA_RESULTS_PATH = Path("data/sigma_alerts.json")
 
 # ─── FIELD MAPPING ────────────────────────────────────────────────────────────
 
-# Maps Sigma field names to AID-ARS event field names
+# Maps Sigma field names to CyberRemedy event field names
 FIELD_MAP = {
     "src_ip": ["src_ip", "source_ip", "SourceIp"],
     "dst_ip": ["dst_ip", "dest_ip", "DestinationIp"],
@@ -188,6 +188,7 @@ class SigmaRule:
                 break
 
     @property
+
     def severity(self) -> str:
         return {"informational": "LOW", "low": "LOW", "medium": "MEDIUM",
                 "high": "HIGH", "critical": "CRITICAL"}.get(self.level, "MEDIUM")
@@ -206,7 +207,7 @@ class SigmaRule:
 BUILTIN_SIGMA_RULES = [
     {
         "title": "High Auth Failure Rate",
-        "id": "aidars-001",
+        "id": "cyberremedy-001",
         "status": "stable",
         "description": "Detects high rate of authentication failures indicating brute force",
         "tags": ["attack.t1110", "attack.credential_access"],
@@ -219,7 +220,7 @@ BUILTIN_SIGMA_RULES = [
     },
     {
         "title": "Suspicious Process Spawned from Web Server",
-        "id": "aidars-002",
+        "id": "cyberremedy-002",
         "status": "stable",
         "description": "Detects shell or interpreter spawned from web/db server process",
         "tags": ["attack.t1059", "attack.execution"],
@@ -232,7 +233,7 @@ BUILTIN_SIGMA_RULES = [
     },
     {
         "title": "File Integrity Violation on Critical Path",
-        "id": "aidars-003",
+        "id": "cyberremedy-003",
         "status": "stable",
         "description": "Detects modification or deletion of critical system files",
         "tags": ["attack.t1565", "attack.impact"],
@@ -245,7 +246,7 @@ BUILTIN_SIGMA_RULES = [
     },
     {
         "title": "Port Scan from Single Source",
-        "id": "aidars-004",
+        "id": "cyberremedy-004",
         "status": "stable",
         "description": "High number of unique destination ports from single source",
         "tags": ["attack.t1046", "attack.discovery"],
@@ -258,7 +259,7 @@ BUILTIN_SIGMA_RULES = [
     },
     {
         "title": "DNS Tunneling Detected",
-        "id": "aidars-005",
+        "id": "cyberremedy-005",
         "status": "stable",
         "description": "High entropy DNS queries indicative of data tunneling",
         "tags": ["attack.t1048", "attack.exfiltration"],
@@ -375,3 +376,30 @@ class SigmaEngine:
             "events_checked": self._events_checked,
             "total_alerts": len(self._alerts),
         }
+
+
+    def _load_builtin_rules(self):
+        """Load built-in sigma rules from data/sigma_rules/builtin_rules.yml"""
+        import yaml as _yaml
+        from pathlib import Path as _Path
+        builtin = _Path(__file__).parent.parent / "data" / "sigma_rules" / "builtin_rules.yml"
+        if not builtin.exists():
+            return
+        try:
+            with open(builtin) as f:
+                data = _yaml.safe_load(f) or {}
+            for rule in data.get("rules", []):
+                self._rules[rule["id"]] = {
+                    "id": rule["id"],
+                    "name": rule["title"],
+                    "title": rule["title"],
+                    "severity": rule.get("severity", "MEDIUM"),
+                    "mitre_id": rule.get("mitre_id", ""),
+                    "category": rule.get("category", "network"),
+                    "description": rule.get("description", ""),
+                    "source": "builtin",
+                    "hits": 0,
+                }
+            logger.info(f"Sigma: loaded {len(data.get('rules',[]))} built-in rules")
+        except Exception as e:
+            logger.warning(f"Sigma builtin load error: {e}")

@@ -1,5 +1,5 @@
 """
-AID-ARS Vulnerability Management
+CyberRemedy Vulnerability Management
 Collects software inventory from agents, correlates with NVD CVE DB.
 """
 
@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
-logger = logging.getLogger("aidars.vuln")
+logger = logging.getLogger("cyberremedy.vuln")
 
 VULN_DB_PATH = Path("data/vuln_db.json")
 INVENTORY_PATH = Path("data/software_inventory.json")

@@ -1,5 +1,5 @@
 """
-AID-ARS YARA Engine — File & Memory Scanning
+CyberRemedy YARA Engine — File & Memory Scanning
 Scans files, byte streams, and extracted network payloads against YARA rules.
 Includes built-in ruleset for common malware families.
 """
@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import List, Optional, Dict
 from datetime import datetime
 
-logger = logging.getLogger("aidars.yara")
+logger = logging.getLogger("cyberremedy.yara")
 
 RULES_DIR = Path("data/yara_rules")
 RESULTS_PATH = Path("data/yara_results.json")
@@ -37,98 +37,33 @@ rule SuspiciousShellCommand {
         any of them
 }
 
-rule MimikatzIndicator {
+rule SuspiciousBase64Decode {
     meta:
-        description = "Detects Mimikatz credential harvester"
-        severity = "CRITICAL"
-        mitre = "T1003"
-    strings:
-        $str1 = "mimikatz" ascii nocase
-        $str2 = "sekurlsa" ascii nocase
-        $str3 = "lsadump" ascii nocase
-        $str4 = "kerberos::list" ascii nocase
-    condition:
-        any of them
-}
-
-rule PowershellObfuscation {
-    meta:
-        description = "Detects PowerShell obfuscation techniques"
+        description = "Detects base64 decode patterns used in droppers"
         severity = "HIGH"
         mitre = "T1027"
     strings:
-        $enc1 = "-EncodedCommand" ascii nocase
-        $enc2 = "-enc " ascii nocase
-        $invoke = "IEX(" ascii nocase
-        $invoke2 = "Invoke-Expression" ascii nocase
-        $download = "DownloadString" ascii nocase
-        $webclient = "New-Object Net.WebClient" ascii nocase
+        $b64_linux = "base64 -d" ascii nocase
+        $b64_win   = "FromBase64String" ascii nocase
+        $b64_py    = "b64decode" ascii nocase
     condition:
-        2 of them
+        any of them
 }
 
-rule CobaltStrikeBeacon {
+rule C2BeaconingPattern {
     meta:
-        description = "Detects Cobalt Strike beacon patterns"
-        severity = "CRITICAL"
+        description = "Detects HTTP C2 beacon patterns"
+        severity = "HIGH"
         mitre = "T1071"
     strings:
-        $cs1 = { 4D 5A 90 00 03 00 00 00 04 00 00 00 FF FF }
-        $cs_str = "ReflectiveLoader" ascii
-        $cs_pipe = "\\\\.\\pipe\\MSSE-" ascii
-    condition:
-        any of them
-}
-
-rule WebshellPHP {
-    meta:
-        description = "PHP webshell detection"
-        severity = "CRITICAL"
-        mitre = "T1505"
-    strings:
-        $eval = "eval(base64_decode" ascii nocase
-        $system = "system($_" ascii nocase
-        $passthru = "passthru($_" ascii nocase
-        $shell_exec = "shell_exec($_" ascii nocase
-    condition:
-        any of them
-}
-''',
-    "ransomware": '''
-rule RansomwareFileActivity {
-    meta:
-        description = "Generic ransomware file extension patterns"
-        severity = "CRITICAL"
-        mitre = "T1486"
-    strings:
-        $ext1 = ".encrypted" ascii nocase
-        $ext2 = ".locked" ascii nocase
-        $ext3 = ".crypto" ascii nocase
-        $note1 = "YOUR FILES HAVE BEEN ENCRYPTED" ascii nocase
-        $note2 = "PAY RANSOM" ascii nocase
-        $note3 = "bitcoin" ascii nocase
-    condition:
-        2 of them
-}
-
-rule WannaCryIndicator {
-    meta:
-        description = "WannaCry ransomware indicators"
-        severity = "CRITICAL"
-        mitre = "T1486"
-    strings:
-        $wc1 = "WannaDecryptor" ascii
-        $wc2 = "@WanaDecryptor" ascii
-        $wc3 = "WANACRY!" ascii
-        $wc4 = "tasksche.exe" ascii nocase
+        $ua1 = "Mozilla/5.0 (compatible;" ascii nocase
+        $pwr = "powershell" ascii nocase
+        $cmd = "cmd.exe /c" ascii nocase
     condition:
         any of them
 }
 ''',
 }
-
-# ─── SIMPLE YARA PATTERN MATCHER (no yara-python dependency) ─────────────────
-
 class SimpleYARARule:
     """Pure-Python YARA-like rule for when yara-python is not installed."""
 
@@ -336,3 +271,28 @@ class YARAScanner:
             "files_scanned": self._scan_count,
             "total_hits": len(self._results),
         }
+
+
+    def _load_builtin_rules(self):
+        """Load built-in YARA rules from data/yara_rules/builtin.yar"""
+        from pathlib import Path as _Path
+        builtin = _Path(__file__).parent.parent / "data" / "yara_rules" / "builtin.yar"
+        if not builtin.exists():
+            return
+        try:
+            import yara as _yara
+            compiled = _yara.compile(str(builtin))
+            self._compiled_rules["builtin"] = compiled
+            # Count rules
+            count = len(open(str(builtin)).read().split("rule ")) - 1
+            self._rule_meta["builtin"] = {"name": "builtin", "count": count, "source": "builtin"}
+            logger.info(f"YARA: loaded {count} built-in rules from {builtin.name}")
+        except ImportError:
+            # yara-python not installed — store rules as text for display
+            text = _Path(str(builtin)).read_text()
+            rule_names = [l.split()[1] for l in text.split("\n") if l.startswith("rule ")]
+            for name in rule_names:
+                self._rule_meta[name] = {"name": name, "source": "builtin", "severity": "HIGH", "mitre_id": ""}
+            logger.info(f"YARA: registered {len(rule_names)} built-in rules (yara-python not installed)")
+        except Exception as e:
+            logger.warning(f"YARA builtin load error: {e}")

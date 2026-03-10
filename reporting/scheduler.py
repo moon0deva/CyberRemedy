@@ -1,5 +1,5 @@
 """
-AID-ARS v4.0 — Report Scheduler + Email Alerting
+CyberRemedy v1.0 — Report Scheduler + Email Alerting
 Sends scheduled HTML reports via SMTP and real-time alerts via email/Slack/Discord/Telegram.
 """
 import json, smtplib, threading, time, logging as _logging
@@ -9,7 +9,7 @@ from email.mime.multipart import MIMEMultipart
 from pathlib import Path
 from typing import Optional, Callable
 
-logger = _logging.getLogger("aidars.notify")
+logger = _logging.getLogger("cyberremedy.notify")
 
 
 class EmailNotifier:
@@ -49,7 +49,7 @@ class EmailNotifier:
         if alert.get("severity","") not in self.severities: return False
         body = f"""
         <html><body style="font-family:monospace;background:#111;color:#eee;padding:20px">
-        <h2 style="color:#ff4757">🚨 AID-ARS Alert: {alert.get('type','Unknown')}</h2>
+        <h2 style="color:#ff4757">🚨 CyberRemedy Alert: {alert.get('type','Unknown')}</h2>
         <table>
         <tr><td><b>Severity:</b></td><td style="color:#ff4757">{alert.get('severity')}</td></tr>
         <tr><td><b>Source IP:</b></td><td>{alert.get('src_ip','?')}</td></tr>
@@ -59,7 +59,7 @@ class EmailNotifier:
         <tr><td><b>Detail:</b></td><td>{alert.get('detail','?')}</td></tr>
         </table>
         </body></html>"""
-        return self.send(f"[AID-ARS] {alert.get('severity')} — {alert.get('type')}", body)
+        return self.send(f"[CyberRemedy] {alert.get('severity')} — {alert.get('type')}", body)
 
 
 class WebhookNotifier:
@@ -142,7 +142,7 @@ class ReportScheduler:
         fname.write_text(html)
         logger.info(f"Daily report saved: {fname}")
         self._email.send(
-            f"[AID-ARS] Daily Security Summary — {datetime.now().strftime('%Y-%m-%d')}",
+            f"[CyberRemedy] Daily Security Summary — {datetime.now().strftime('%Y-%m-%d')}",
             html
         )
         return str(fname)
@@ -159,7 +159,7 @@ class ReportScheduler:
         h1{{color:#00d2d3}}table{{border-collapse:collapse;width:100%}}
         th,td{{border:1px solid #333;padding:8px;text-align:left}}
         th{{background:#222}}.crit{{color:#ff4757}}.high{{color:#ffa502}}</style></head>
-        <body><h1>🛡 AID-ARS — {title}</h1>
+        <body><h1>🛡 CyberRemedy — {title}</h1>
         <p>Generated: {datetime.now().isoformat()[:19]}</p>
         <h2>Summary</h2>
         <table><tr><th>Metric</th><th>Value</th></tr>

@@ -1,0 +1,332 @@
+[
+  {
+    "id": "CASE-20260309-FA2364",
+    "title": "[HIGH] Rogue Device Detected \u2014 192.168.0.1",
+    "description": "Auto-created from alert ID None.\nSource: 192.168.0.1 \u2192 192.168.0.1\nMITRE:  \u2014 Unknown Technique\nDetail: New device Unknown (b4:f2:67:12:41:7b) on network",
+    "severity": "HIGH",
+    "status": "OPEN",
+    "created_by": "system",
+    "assigned_to": null,
+    "created_at": "2026-03-09T17:08:41.684583",
+    "updated_at": "2026-03-09T17:08:41.684735",
+    "closed_at": null,
+    "sla_deadline": "2026-03-10T17:08:41.684638",
+    "sla_breached": true,
+    "alert_ids": [
+      null
+    ],
+    "iocs": [
+      "192.168.0.1"
+    ],
+    "mitre_ids": [
+      ""
+    ],
+    "tags": [],
+    "comments": [],
+    "evidence": [],
+    "escalation_count": 0,
+    "time_to_respond_s": null,
+    "comment_count": 0,
+    "evidence_count": 0
+  },
+  {
+    "id": "CASE-20260309-11997C",
+    "title": "[HIGH] [ML] TCP Flag Scan (Heuristic) \u2014 192.168.0.220",
+    "description": "Auto-created from alert ID 5097.\nSource: 192.168.0.220 \u2192 140.82.113.25\nMITRE: T1046 \u2014 Network Service Scanning\nDetail: Anomaly score: -0.4500 | reasons: ['flag_scan_xmas_null', 'high_size_variance'] | 24 pkts, 6136 B/s from 192.168.0.220",
+    "severity": "HIGH",
+    "status": "OPEN",
+    "created_by": "system",
+    "assigned_to": null,
+    "created_at": "2026-03-09T20:28:34.274487",
+    "updated_at": "2026-03-09T20:28:34.274577",
+    "closed_at": null,
+    "sla_deadline": "2026-03-10T20:28:34.274514",
+    "sla_breached": true,
+    "alert_ids": [
+      5097
+    ],
+    "iocs": [
+      "192.168.0.220"
+    ],
+    "mitre_ids": [
+      "T1046"
+    ],
+    "tags": [],
+    "comments": [],
+    "evidence": [],
+    "escalation_count": 0,
+    "time_to_respond_s": null,
+    "comment_count": 0,
+    "evidence_count": 0
+  },
+  {
+    "id": "CASE-20260309-339886",
+    "title": "[HIGH] [ML] TCP Flag Scan (Heuristic) \u2014 192.168.0.220",
+    "description": "Auto-created from alert ID 5102.\nSource: 192.168.0.220 \u2192 140.82.121.3\nMITRE: T1046 \u2014 Network Service Scanning\nDetail: Anomaly score: -0.4500 | reasons: ['flag_scan_xmas_null', 'high_size_variance'] | 39 pkts, 674 B/s from 192.168.0.220",
+    "severity": "HIGH",
+    "status": "OPEN",
+    "created_by": "system",
+    "assigned_to": null,
+    "created_at": "2026-03-09T20:29:03.954584",
+    "updated_at": "2026-03-09T20:29:03.954614",
+    "closed_at": null,
+    "sla_deadline": "2026-03-10T20:29:03.954592",
+    "sla_breached": true,
+    "alert_ids": [
+      5102
+    ],
+    "iocs": [
+      "192.168.0.220"
+    ],
+    "mitre_ids": [
+      "T1046"
+    ],
+    "tags": [],
+    "comments": [],
+    "evidence": [],
+    "escalation_count": 0,
+    "time_to_respond_s": null,
+    "comment_count": 0,
+    "evidence_count": 0
+  },
+  {
+    "id": "CASE-20260309-4AF71D",
+    "title": "[HIGH] [ML] TCP Flag Scan (Heuristic) \u2014 192.168.0.220",
+    "description": "Auto-created from alert ID 5002.\nSource: 192.168.0.220 \u2192 192.168.0.1\nMITRE: T1046 \u2014 Network Service Scanning\nDetail: Anomaly score: -0.4500 | reasons: ['flag_scan_xmas_null', 'high_size_variance'] | 8 pkts, 24645 B/s from 192.168.0.220",
+    "severity": "HIGH",
+    "status": "OPEN",
+    "created_by": "system",
+    "assigned_to": null,
+    "created_at": "2026-03-09T20:30:23.006991",
+    "updated_at": "2026-03-09T20:30:23.007070",
+    "closed_at": null,
+    "sla_deadline": "2026-03-10T20:30:23.007015",
+    "sla_breached": true,
+    "alert_ids": [
+      5002
+    ],
+    "iocs": [
+      "192.168.0.220"
+    ],
+    "mitre_ids": [
+      "T1046"
+    ],
+    "tags": [],
+    "comments": [],
+    "evidence": [],
+    "escalation_count": 0,
+    "time_to_respond_s": null,
+    "comment_count": 0,
+    "evidence_count": 0
+  },
+  {
+    "id": "CASE-20260309-EB6797",
+    "title": "[HIGH] [ML] TCP Flag Scan (Heuristic) \u2014 192.168.0.220",
+    "description": "Auto-created from alert ID 5001.\nSource: 192.168.0.220 \u2192 140.82.112.25\nMITRE: T1046 \u2014 Network Service Scanning\nDetail: Anomaly score: -0.4500 | reasons: ['flag_scan_xmas_null', 'high_size_variance'] | 21 pkts, 5782 B/s from 192.168.0.220",
+    "severity": "HIGH",
+    "status": "OPEN",
+    "created_by": "system",
+    "assigned_to": null,
+    "created_at": "2026-03-09T20:30:55.493917",
+    "updated_at": "2026-03-09T20:30:55.494003",
+    "closed_at": null,
+    "sla_deadline": "2026-03-10T20:30:55.493947",
+    "sla_breached": true,
+    "alert_ids": [
+      5001
+    ],
+    "iocs": [
+      "192.168.0.220"
+    ],
+    "mitre_ids": [
+      "T1046"
+    ],
+    "tags": [],
+    "comments": [],
+    "evidence": [],
+    "escalation_count": 0,
+    "time_to_respond_s": null,
+    "comment_count": 0,
+    "evidence_count": 0
+  },
+  {
+    "id": "CASE-20260309-1AB2C2",
+    "title": "[HIGH] [ML] TCP Flag Scan (Heuristic) \u2014 192.168.0.220",
+    "description": "Auto-created from alert ID 5005.\nSource: 192.168.0.220 \u2192 140.82.121.4\nMITRE: T1046 \u2014 Network Service Scanning\nDetail: Anomaly score: -0.4500 | reasons: ['flag_scan_xmas_null', 'high_size_variance'] | 33 pkts, 662 B/s from 192.168.0.220",
+    "severity": "HIGH",
+    "status": "OPEN",
+    "created_by": "system",
+    "assigned_to": null,
+    "created_at": "2026-03-09T20:31:25.149301",
+    "updated_at": "2026-03-09T20:31:25.149337",
+    "closed_at": null,
+    "sla_deadline": "2026-03-10T20:31:25.149313",
+    "sla_breached": true,
+    "alert_ids": [
+      5005
+    ],
+    "iocs": [
+      "192.168.0.220"
+    ],
+    "mitre_ids": [
+      "T1046"
+    ],
+    "tags": [],
+    "comments": [],
+    "evidence": [],
+    "escalation_count": 0,
+    "time_to_respond_s": null,
+    "comment_count": 0,
+    "evidence_count": 0
+  },
+  {
+    "id": "CASE-20260309-0DC98B",
+    "title": "[HIGH] [ML] TCP Flag Scan (Heuristic) \u2014 192.168.0.220",
+    "description": "Auto-created from alert ID 5073.\nSource: 192.168.0.220 \u2192 54.157.10.180\nMITRE: T1046 \u2014 Network Service Scanning\nDetail: Anomaly score: -0.4500 | reasons: ['flag_scan_xmas_null', 'high_size_variance'] | 47 pkts, 94 B/s from 192.168.0.220",
+    "severity": "HIGH",
+    "status": "OPEN",
+    "created_by": "system",
+    "assigned_to": null,
+    "created_at": "2026-03-09T20:47:11.541884",
+    "updated_at": "2026-03-09T20:47:11.541931",
+    "closed_at": null,
+    "sla_deadline": "2026-03-10T20:47:11.541898",
+    "sla_breached": true,
+    "alert_ids": [
+      5073
+    ],
+    "iocs": [
+      "192.168.0.220"
+    ],
+    "mitre_ids": [
+      "T1046"
+    ],
+    "tags": [],
+    "comments": [],
+    "evidence": [],
+    "escalation_count": 0,
+    "time_to_respond_s": null,
+    "comment_count": 0,
+    "evidence_count": 0
+  },
+  {
+    "id": "CASE-20260309-02A8E1",
+    "title": "[HIGH] [ML] TCP Flag Scan (Heuristic) \u2014 192.168.0.220",
+    "description": "Auto-created from alert ID 5080.\nSource: 192.168.0.220 \u2192 192.168.0.1\nMITRE: T1046 \u2014 Network Service Scanning\nDetail: Anomaly score: -0.4500 | reasons: ['flag_scan_xmas_null', 'high_size_variance'] | 7 pkts, 252495 B/s from 192.168.0.220",
+    "severity": "HIGH",
+    "status": "OPEN",
+    "created_by": "system",
+    "assigned_to": null,
+    "created_at": "2026-03-09T20:47:42.005002",
+    "updated_at": "2026-03-09T20:47:42.005027",
+    "closed_at": null,
+    "sla_deadline": "2026-03-10T20:47:42.005009",
+    "sla_breached": true,
+    "alert_ids": [
+      5080
+    ],
+    "iocs": [
+      "192.168.0.220"
+    ],
+    "mitre_ids": [
+      "T1046"
+    ],
+    "tags": [],
+    "comments": [],
+    "evidence": [],
+    "escalation_count": 0,
+    "time_to_respond_s": null,
+    "comment_count": 0,
+    "evidence_count": 0
+  },
+  {
+    "id": "CASE-20260309-611FA2",
+    "title": "[HIGH] [ML] TCP Flag Scan (Heuristic) \u2014 192.168.0.220",
+    "description": "Auto-created from alert ID 5273.\nSource: 192.168.0.220 \u2192 18.97.36.70\nMITRE: T1046 \u2014 Network Service Scanning\nDetail: Anomaly score: -0.5000 | reasons: ['low_entropy_repeated_payload', 'flag_scan_xmas_null'] | 101 pkts, 10 B/s from 192.168.0.220",
+    "severity": "HIGH",
+    "status": "OPEN",
+    "created_by": "system",
+    "assigned_to": null,
+    "created_at": "2026-03-09T21:59:46.837701",
+    "updated_at": "2026-03-09T21:59:46.837756",
+    "closed_at": null,
+    "sla_deadline": "2026-03-10T21:59:46.837719",
+    "sla_breached": true,
+    "alert_ids": [
+      5273
+    ],
+    "iocs": [
+      "192.168.0.220"
+    ],
+    "mitre_ids": [
+      "T1046"
+    ],
+    "tags": [],
+    "comments": [],
+    "evidence": [],
+    "escalation_count": 0,
+    "time_to_respond_s": null,
+    "comment_count": 0,
+    "evidence_count": 0
+  },
+  {
+    "id": "CASE-20260310-188D48",
+    "title": "[HIGH] [ML] TCP Flag Scan (Heuristic) \u2014 192.168.0.220",
+    "description": "Auto-created from alert ID 5037.\nSource: 192.168.0.220 \u2192 142.250.120.102\nMITRE: T1046 \u2014 Network Service Scanning\nDetail: Anomaly score: -0.4500 | reasons: ['flag_scan_xmas_null', 'high_size_variance'] | 153 pkts, 512 B/s from 192.168.0.220",
+    "severity": "HIGH",
+    "status": "OPEN",
+    "created_by": "system",
+    "assigned_to": null,
+    "created_at": "2026-03-10T23:19:56.326020",
+    "updated_at": "2026-03-10T23:19:56.326049",
+    "closed_at": null,
+    "sla_deadline": "2026-03-11T23:19:56.326030",
+    "sla_breached": false,
+    "alert_ids": [
+      5037
+    ],
+    "iocs": [
+      "192.168.0.220"
+    ],
+    "mitre_ids": [
+      "T1046"
+    ],
+    "tags": [],
+    "comments": [],
+    "evidence": [],
+    "escalation_count": 0,
+    "time_to_respond_s": null,
+    "comment_count": 0,
+    "evidence_count": 0
+  },
+  {
+    "id": "CASE-20260310-AFC037",
+    "title": "[HIGH] [ML] TCP Flag Scan (Heuristic) \u2014 192.168.0.220",
+    "description": "Auto-created from alert ID 5074.\nSource: 192.168.0.220 \u2192 142.251.156.119\nMITRE: T1046 \u2014 Network Service Scanning\nDetail: Anomaly score: -0.4500 | reasons: ['flag_scan_xmas_null', 'high_size_variance'] | 676 pkts, 1424 B/s from 192.168.0.220",
+    "severity": "HIGH",
+    "status": "OPEN",
+    "created_by": "system",
+    "assigned_to": null,
+    "created_at": "2026-03-10T23:23:38.812689",
+    "updated_at": "2026-03-10T23:23:38.812807",
+    "closed_at": null,
+    "sla_deadline": "2026-03-11T23:23:38.812723",
+    "sla_breached": false,
+    "alert_ids": [
+      5074
+    ],
+    "iocs": [
+      "192.168.0.220"
+    ],
+    "mitre_ids": [
+      "T1046"
+    ],
+    "tags": [],
+    "comments": [],
+    "evidence": [],
+    "escalation_count": 0,
+    "time_to_respond_s": null,
+    "comment_count": 0,
+    "evidence_count": 0
+  }
+]

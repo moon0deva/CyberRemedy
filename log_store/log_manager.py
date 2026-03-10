@@ -1,11 +1,11 @@
-"""AID-ARS v4.0 — Log Manager. Rotating JSONL, 1-year retention, CSV export."""
+"""CyberRemedy v1.0 — Log Manager. Rotating JSONL, 1-year retention, CSV export."""
 import os, json, gzip, shutil, threading, io, csv
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 import logging as _logging
 
-logger = _logging.getLogger("aidars.logmgr")
+logger = _logging.getLogger("cyberremedy.logmgr")
 
 class LogChannel:
     def __init__(self, name, base_dir, rotate_daily=True, compress_old=True):

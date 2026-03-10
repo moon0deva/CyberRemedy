@@ -1,5 +1,5 @@
 """
-AID-ARS Honeypot Sensors
+CyberRemedy Honeypot Sensors
 Deploys decoy services (SSH, HTTP, SMB, FTP, Telnet) that alert on any connection.
 Zero false positives — any connection to a honeypot is malicious by definition.
 Inspired by OpenCanary.
@@ -11,7 +11,7 @@ import logging
 from datetime import datetime
 from typing import List, Dict, Callable, Optional
 
-logger = logging.getLogger("aidars.honeypot")
+logger = logging.getLogger("cyberremedy.honeypot")
 
 
 class HoneypotService:

@@ -1,5 +1,5 @@
 """
-AID-ARS Behavioral Correlation Engine
+CyberRemedy Behavioral Correlation Engine
 Correlates multiple alerts over time to reconstruct attack chains,
 reduce false positives, and identify multi-stage intrusions.
 """
@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Dict, List, Optional
 from dataclasses import dataclass, field
 
-logger = logging.getLogger("aidars.detection.correlation")
+logger = logging.getLogger("cyberremedy.detection.correlation")
 
 
 # ─── KILL CHAIN STAGES ────────────────────────────────────────────────────────

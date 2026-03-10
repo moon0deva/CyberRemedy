@@ -1,5 +1,5 @@
 """
-AID-ARS Feature Extraction Engine
+CyberRemedy Feature Extraction Engine
 Aggregates raw packets into network flows and extracts
 statistical, entropy, and behavioral features for ML models.
 """
@@ -10,7 +10,7 @@ import logging
 from collections import defaultdict, deque
 from typing import Dict, List, Optional
 
-logger = logging.getLogger("aidars.features")
+logger = logging.getLogger("cyberremedy.features")
 
 # ─── FLOW KEY ─────────────────────────────────────────────────────────────────
 

@@ -1,5 +1,5 @@
 """
-AID-ARS SOAR — Playbook Engine
+CyberRemedy SOAR — Playbook Engine
 Automated investigation and response workflows.
 Inspired by Security Onion Playbooks + Graylog Event Procedures.
 """
@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Callable, Any
 
-logger = logging.getLogger("aidars.soar")
+logger = logging.getLogger("cyberremedy.soar")
 
 PLAYBOOKS_PATH = Path("data/playbooks.json")
 EXECUTIONS_PATH = Path("data/playbook_executions.json")

@@ -1,10 +1,10 @@
-"""AID-ARS v4.0 — Firewall Integrator. Auto-detects iptables/ufw/nftables/windows."""
+"""CyberRemedy v1.0 — Firewall Integrator. Auto-detects iptables/ufw/nftables/windows."""
 import os, json, platform, subprocess, threading, logging as _logging
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-logger = _logging.getLogger("aidars.firewall")
+logger = _logging.getLogger("cyberremedy.firewall")
 
 def _run(cmd, dry=False):
     if dry:
@@ -53,17 +53,17 @@ class _UFW:
 class _NFT:
     def __init__(self, dry):
         self.dry=dry
-        for c in [["nft","add","table","inet","aidars"],
-                  ["nft","add","set","inet","aidars","blocklist","{","type","ipv4_addr",";","}"],
-                  ["nft","add","chain","inet","aidars","input","{","type","filter","hook","input","priority","0",";","}"],
-                  ["nft","add","rule","inet","aidars","input","ip","saddr","@blocklist","drop"]]:
+        for c in [["nft","add","table","inet","cyberremedy"],
+                  ["nft","add","set","inet","cyberremedy","blocklist","{","type","ipv4_addr",";","}"],
+                  ["nft","add","chain","inet","cyberremedy","input","{","type","filter","hook","input","priority","0",";","}"],
+                  ["nft","add","rule","inet","cyberremedy","input","ip","saddr","@blocklist","drop"]]:
             _run(c, dry)
-    def block(self,ip):   return _run(["nft","add","element","inet","aidars","blocklist","{",ip,"}"],self.dry)
-    def unblock(self,ip): return _run(["nft","delete","element","inet","aidars","blocklist","{",ip,"}"],self.dry)
+    def block(self,ip):   return _run(["nft","add","element","inet","cyberremedy","blocklist","{",ip,"}"],self.dry)
+    def unblock(self,ip): return _run(["nft","delete","element","inet","cyberremedy","blocklist","{",ip,"}"],self.dry)
     def rules(self):
-        ok,out=_run(["nft","list","set","inet","aidars","blocklist"],False)
+        ok,out=_run(["nft","list","set","inet","cyberremedy","blocklist"],False)
         return [{"source":l.strip().rstrip(",")} for l in (out.split("\n") if ok else []) if "." in l]
-    def flush(self): return _run(["nft","flush","set","inet","aidars","blocklist"],self.dry)
+    def flush(self): return _run(["nft","flush","set","inet","cyberremedy","blocklist"],self.dry)
 
 class _WIN:
     def __init__(self, prefix, dry): self.pfx=prefix; self.dry=dry
@@ -103,10 +103,10 @@ class FirewallIntegrator:
         threading.Thread(target=self._ttl_loop, daemon=True, name="fw-ttl").start()
 
     def _mk(self, cfg, name):
-        if name=="iptables": return _IPT(cfg.get("chain_name","AIDARS"), self.dry_run)
+        if name=="iptables": return _IPT(cfg.get("chain_name","CYBERREMEDY"), self.dry_run)
         if name=="ufw":      return _UFW(self.dry_run)
         if name=="nftables": return _NFT(self.dry_run)
-        if name=="windows":  return _WIN(cfg.get("windows_rule_prefix","AIDARS-Block-"), self.dry_run)
+        if name=="windows":  return _WIN(cfg.get("windows_rule_prefix","CYBERREMEDY-Block-"), self.dry_run)
         return _SIM()
 
     def block_ip(self, ip, reason="alert", ttl: Optional[int]=None, alert_id=None):

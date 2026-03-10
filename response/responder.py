@@ -1,5 +1,5 @@
 """
-AID-ARS Autonomous Response Engine
+CyberRemedy Autonomous Response Engine
 Executes defensive actions based on alert risk scores.
 All actions are logged and reversible.
 """
@@ -13,7 +13,7 @@ from datetime import datetime
 from typing import Dict, List, Optional
 from pathlib import Path
 
-logger = logging.getLogger("aidars.response")
+logger = logging.getLogger("cyberremedy.response")
 
 
 # ─── RESPONSE ACTION TYPES ────────────────────────────────────────────────────

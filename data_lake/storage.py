@@ -1,5 +1,5 @@
 """
-AID-ARS Data Lake — Tiered Storage
+CyberRemedy Data Lake — Tiered Storage
 Hot (indexed, fast query) → Warm (compressed) → Cold (archive).
 Inspired by Graylog Data Lake + Elastic frozen tier.
 """
@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 
-logger = logging.getLogger("aidars.datalake")
+logger = logging.getLogger("cyberremedy.datalake")
 
 LAKE_BASE = Path("data/lake")
 HOT_DIR = LAKE_BASE / "hot"

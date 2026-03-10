@@ -1,5 +1,5 @@
 """
-AID-ARS SOC Report Generator
+CyberRemedy SOC Report Generator
 Produces JSON alert logs and professional HTML incident reports.
 """
 
@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import List
 
-logger = logging.getLogger("aidars.reporting")
+logger = logging.getLogger("cyberremedy.reporting")
 
 
 # ─── HTML TEMPLATE ────────────────────────────────────────────────────────────
@@ -18,7 +18,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>AID-ARS Incident Report — {report_id}</title>
+<title>CyberRemedy Incident Report — {report_id}</title>
 <style>
   body {{ font-family: 'Segoe UI', Arial, sans-serif; background: #0a0e1a; color: #c8e8ff; margin: 0; padding: 24px; }}
   .header {{ border-bottom: 2px solid #00d2ff; padding-bottom: 16px; margin-bottom: 24px; }}
@@ -47,7 +47,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 </head>
 <body>
 <div class="header">
-  <div class="logo">⬡ AID-ARS — AI-Driven Adaptive IDS + Autonomous Response</div>
+  <div class="logo">⬡ CyberRemedy — AI-Driven Adaptive IDS + Autonomous Response</div>
   <div class="report-meta">
     Report ID: {report_id} &nbsp;|&nbsp;
     Generated: {generated_at} &nbsp;|&nbsp;
@@ -103,7 +103,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 </div>
 
 <div class="footer">
-  AID-ARS v2.1 &nbsp;|&nbsp; Generated {generated_at} &nbsp;|&nbsp;
+  CyberRemedy v2.1 &nbsp;|&nbsp; Generated {generated_at} &nbsp;|&nbsp;
   Offline Mode: Active &nbsp;|&nbsp; All rights reserved
 </div>
 </body>
@@ -246,7 +246,7 @@ class SOCReporter:
 
         # Summary text
         summary = (
-            f"During the analysis period, AID-ARS detected {total} security events across "
+            f"During the analysis period, CyberRemedy detected {total} security events across "
             f"{len(set(a.get('src_ip','') for a in alerts))} unique source IPs. "
             f"{critical} critical-severity alerts were raised, with {blocked} automated responses executed. "
             f"{open_alerts} alerts remain open and require analyst review. "

@@ -1,5 +1,5 @@
 """
-AID-ARS Forensic Timeline
+CyberRemedy Forensic Timeline
 Reconstructs attack timelines from correlated events.
 Provides process tree visualization, session reconstruction, and pivot analysis.
 """
@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
-logger = logging.getLogger("aidars.forensics")
+logger = logging.getLogger("cyberremedy.forensics")
 
 TIMELINE_PATH = Path("data/forensic_timelines.json")
 

@@ -1,0 +1,64 @@
+[
+  {
+    "username": "admin",
+    "role": "admin",
+    "tenant_id": "default",
+    "email": "admin@cyberremedy.local",
+    "created_at": "2026-03-09T17:08:31.625904",
+    "last_login": null,
+    "active": true,
+    "api_key_count": 1,
+    "permissions": {
+      "alerts": [
+        "read",
+        "write",
+        "delete"
+      ],
+      "cases": [
+        "read",
+        "write",
+        "delete",
+        "assign"
+      ],
+      "blocks": [
+        "read",
+        "write",
+        "delete"
+      ],
+      "config": [
+        "read",
+        "write"
+      ],
+      "users": [
+        "read",
+        "write",
+        "delete"
+      ],
+      "reports": [
+        "read",
+        "write"
+      ],
+      "playbooks": [
+        "read",
+        "write",
+        "execute"
+      ],
+      "iocs": [
+        "read",
+        "write",
+        "delete"
+      ],
+      "vuln": [
+        "read",
+        "write"
+      ],
+      "compliance": [
+        "read"
+      ]
+    },
+    "password_hash": "e8fe79c448969e4b6b9496d751903fa9:f8d266ad7f0342fa4e3167e70d143e7fcddd6003f1e051e8a065317f22809c74",
+    "api_key_hashes": [
+      "606ebecdee1bd6636877324f1ba2cc91fba7b73c23f6677e4bbda74af16aa9f6"
+    ]
+  }
+]

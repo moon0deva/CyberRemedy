@@ -1,5 +1,5 @@
 """
-AID-ARS Signature Detection Engine
+CyberRemedy Signature Detection Engine
 Rule-based detection for known attack patterns.
 Each rule returns None (no match) or an Alert dict.
 """
@@ -8,7 +8,7 @@ import logging
 from datetime import datetime
 from typing import Optional, List
 
-logger = logging.getLogger("aidars.detection.signature")
+logger = logging.getLogger("cyberremedy.detection.signature")
 
 
 # ─── ALERT FACTORY ────────────────────────────────────────────────────────────

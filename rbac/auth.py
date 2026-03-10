@@ -1,5 +1,5 @@
 """
-AID-ARS RBAC — Role-Based Access Control
+CyberRemedy RBAC — Role-Based Access Control
 Supports: admin, analyst, viewer, readonly roles.
 API key management, multi-tenant namespace isolation.
 """
@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
-logger = logging.getLogger("aidars.rbac")
+logger = logging.getLogger("cyberremedy.rbac")
 
 USERS_PATH = Path("data/users.json")
 
@@ -97,7 +97,7 @@ class User:
         return hashlib.sha256((salt + password).encode()).hexdigest() == stored_hash
 
     def generate_api_key(self) -> str:
-        key = f"aidars_{secrets.token_urlsafe(32)}"
+        key = f"cyberremedy_{secrets.token_urlsafe(32)}"
         self.api_keys.append(hashlib.sha256(key.encode()).hexdigest())
         return key  # Return raw key once (not stored)
 
@@ -163,8 +163,8 @@ class RBACManager:
         USERS_PATH.write_text(json.dumps(data, indent=2))
 
     def _create_default_admin(self):
-        admin = User("admin", "admin", "default", "admin@aidars.local")
-        admin.set_password("aidars_admin_2025")
+        admin = User("admin", "admin", "default", "admin@cyberremedy.local")
+        admin.set_password("cyberremedy_admin_2025")
         raw_key = admin.generate_api_key()
         self._users["admin"] = admin
         for kh in admin.api_keys:

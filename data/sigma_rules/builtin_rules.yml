@@ -1,0 +1,205 @@
+# CyberRemedy Built-in Sigma Rules v2.0
+rules:
+  - id: SIG-001
+    title: Port Scan Detected
+    severity: MEDIUM
+    mitre_id: T1046
+    category: network
+    description: Multiple destination ports probed from single source within short window
+    detection:
+      unique_dst_ports: 10
+      window_seconds: 60
+
+  - id: SIG-002
+    title: SSH Brute Force
+    severity: HIGH
+    mitre_id: T1110.001
+    category: network
+    description: Repeated SSH connection attempts from same source IP
+    detection:
+      dst_port: 22
+      attempts: 5
+      window_seconds: 30
+
+  - id: SIG-003
+    title: DNS Exfiltration Attempt
+    severity: HIGH
+    mitre_id: T1048.003
+    category: network
+    description: Abnormally long DNS query suggesting data exfiltration via DNS tunnel
+    detection:
+      protocol: DNS
+      query_length: 100
+
+  - id: SIG-004
+    title: Cleartext Password Transmission
+    severity: HIGH
+    mitre_id: T1040
+    category: network
+    description: Credentials sent over unencrypted protocols (FTP, Telnet, HTTP)
+    detection:
+      dst_port: [21, 23, 80]
+
+  - id: SIG-005
+    title: RDP Brute Force
+    severity: HIGH
+    mitre_id: T1110.001
+    category: network
+    description: Multiple failed RDP login attempts from single source
+    detection:
+      dst_port: 3389
+      attempts: 3
+      window_seconds: 60
+
+  - id: SIG-006
+    title: SMB Lateral Movement
+    severity: CRITICAL
+    mitre_id: T1021.002
+    category: network
+    description: SMB connections to multiple internal hosts suggesting lateral movement
+    detection:
+      dst_port: [445, 139]
+      unique_dst_ips: 3
+      window_seconds: 120
+
+  - id: SIG-007
+    title: Outbound Connection on Non-standard Port
+    severity: LOW
+    mitre_id: T1571
+    category: network
+    description: Outbound TCP connection to non-standard high port
+    detection:
+      direction: outgoing
+      dst_port_min: 49152
+      dst_port_max: 65535
+
+  - id: SIG-008
+    title: ICMP Flood
+    severity: MEDIUM
+    mitre_id: T1498.001
+    category: network
+    description: Large volume of ICMP packets from single source (ping flood)
+    detection:
+      protocol: ICMP
+      count: 50
+      window_seconds: 10
+
+  - id: SIG-009
+    title: Telnet Access Attempt
+    severity: MEDIUM
+    mitre_id: T1021.004
+    category: network
+    description: Telnet connection attempt (insecure remote access)
+    detection:
+      dst_port: 23
+
+  - id: SIG-010
+    title: FTP Login Attempt
+    severity: LOW
+    mitre_id: T1021.005
+    category: network
+    description: FTP authentication attempt detected
+    detection:
+      dst_port: 21
+
+  - id: SIG-011
+    title: MySQL Unauthorized Access
+    severity: HIGH
+    mitre_id: T1190
+    category: network
+    description: Connection attempt to MySQL from external source
+    detection:
+      dst_port: 3306
+      direction: incoming
+
+  - id: SIG-012
+    title: HTTP Directory Traversal
+    severity: HIGH
+    mitre_id: T1083
+    category: network
+    description: HTTP request containing directory traversal pattern
+    detection:
+      dst_port: 80
+      payload_pattern: "../"
+
+  - id: SIG-013
+    title: Large Data Exfiltration
+    severity: CRITICAL
+    mitre_id: T1041
+    category: network
+    description: Unusually large outbound data transfer suggesting exfiltration
+    detection:
+      direction: outgoing
+      bytes_min: 10485760
+
+  - id: SIG-014
+    title: Tor Exit Node Communication
+    severity: CRITICAL
+    mitre_id: T1090.003
+    category: network
+    description: Traffic to known Tor exit node IP ranges
+    detection:
+      dst_port: [9001, 9030, 9050, 9051]
+
+  - id: SIG-015
+    title: C2 Beacon Pattern
+    severity: CRITICAL
+    mitre_id: T1071.001
+    category: network
+    description: Periodic outbound connections at regular intervals suggesting C2 beaconing
+    detection:
+      direction: outgoing
+      periodic: true
+      interval_seconds: 60
+
+  - id: SIG-016
+    title: Internal Host Scan
+    severity: MEDIUM
+    mitre_id: T1018
+    category: network
+    description: Single host scanning multiple internal IPs (network discovery)
+    detection:
+      unique_dst_ips: 20
+      window_seconds: 60
+      dst_private: true
+
+  - id: SIG-017
+    title: LDAP Enumeration
+    severity: MEDIUM
+    mitre_id: T1087.002
+    category: network
+    description: LDAP queries suggesting Active Directory enumeration
+    detection:
+      dst_port: [389, 636, 3268, 3269]
+
+  - id: SIG-018
+    title: NTP Amplification DDoS
+    severity: HIGH
+    mitre_id: T1498.002
+    category: network
+    description: NTP monlist requests used in amplification attacks
+    detection:
+      dst_port: 123
+      protocol: UDP
+      count: 20
+
+  - id: SIG-019
+    title: Credential Dumping via LSASS
+    severity: CRITICAL
+    mitre_id: T1003.001
+    category: process
+    description: Network traffic pattern consistent with credential dumping tools
+    detection:
+      dst_port: [445, 135]
+      rapid_sequence: true
+
+  - id: SIG-020
+    title: Suspicious PowerShell Download
+    severity: HIGH
+    mitre_id: T1059.001
+    category: network
+    description: HTTP GET to known script hosting sites from internal host
+    detection:
+      direction: outgoing
+      dst_port: [80, 443]
+      payload_pattern: "powershell"

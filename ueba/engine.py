@@ -1,5 +1,5 @@
 """
-AID-ARS UEBA — User & Entity Behavior Analytics
+CyberRemedy UEBA — User & Entity Behavior Analytics
 Builds behavioral baselines per user/host and scores deviations.
 Detects: impossible travel, off-hours access, data staging, 
 lateral movement, privilege escalation patterns.
@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional
 
-logger = logging.getLogger("aidars.ueba")
+logger = logging.getLogger("cyberremedy.ueba")
 
 
 # ─── BEHAVIORAL BASELINE ──────────────────────────────────────────────────────

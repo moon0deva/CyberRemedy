@@ -1,0 +1,1 @@
+{"event_type": "syslog", "detail": "<46>Mar  9 13:08:32 kali -- MARK --", "ts": "2026-03-09T13:09:15.834018", "raw": "<46>Mar  9 13:08:32 kali -- MARK --", "severity": "LOW", "facility": "unknown", "host": "unknown", "tag": "syslog", "timestamp": "2026-03-09T17:09:15.833909", "source": "syslog"}

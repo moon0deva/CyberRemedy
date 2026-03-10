@@ -1,9 +1,9 @@
-"""AID-ARS v4.0 — GeoIP. No API keys. Uses offline CSV (downloaded on startup) + ip-api.com fallback."""
+"""CyberRemedy v1.0 — GeoIP. No API keys. Uses offline CSV (downloaded on startup) + ip-api.com fallback."""
 import json, logging as _logging, threading, ipaddress, bisect
 from pathlib import Path
 from typing import Optional
 
-logger = _logging.getLogger("aidars.geoip")
+logger = _logging.getLogger("cyberremedy.geoip")
 
 _PRIV = [ipaddress.IPv4Network(n) for n in
          ["10.0.0.0/8","172.16.0.0/12","192.168.0.0/16","127.0.0.0/8","169.254.0.0/16","0.0.0.0/8"]]

@@ -1,5 +1,5 @@
 """
-AID-ARS MITRE ATT&CK Mapper
+CyberRemedy MITRE ATT&CK Mapper
 Maps alert detections to MITRE ATT&CK techniques and tactics.
 Fully offline using local techniques.json database.
 """
@@ -9,7 +9,7 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-logger = logging.getLogger("aidars.mitre")
+logger = logging.getLogger("cyberremedy.mitre")
 
 _DB_PATH = Path(__file__).parent / "techniques.json"
 
