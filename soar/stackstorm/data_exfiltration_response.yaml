@@ -1,0 +1,286 @@
+version: 1.0
+description: >
+  Automated data exfiltration detection and response. Triggered by CyberRemedy
+  on large outbound data transfers or suspicious destination IPs. Blocks outbound,
+  suspends user, snapshots system state, and creates auto-closed incident.
+
+input:
+  - alert_id
+  - user_id
+  - host_id
+  - source_ip
+  - destination_ip
+  - file_hash
+  - process_name
+  - risk_score
+  - geo_location
+  - timestamp
+
+vars:
+  risk_level: ""
+  final_action: "none"
+  exfil_confirmed: false
+  bytes_transferred: 0
+  case_id: ""
+
+tasks:
+  evaluate_risk:
+    action: core.noop
+    publish:
+      risk_level: >
+        <% if ctx().risk_score > 90 %>full_containment<% elif ctx().risk_score >= 70 %>conditional<% else %>exit<% endif %>
+    next:
+      - when: <% ctx().risk_level = "exit" %>
+        do: log_no_action
+      - when: <% ctx().risk_level in ["full_containment", "conditional"] %>
+        do:
+          - enrich_threat_intel
+          - check_outbound_volume
+
+  enrich_threat_intel:
+    action: core.local
+    input:
+      cmd: >
+        python3 -c "
+        import json
+        from pathlib import Path
+        dst = '{{ ctx().destination_ip }}'
+        result = {'is_malicious': False, 'threat_score': 0, 'category': 'unknown'}
+        ioc_file = Path('data/ioc_store.json')
+        if ioc_file.exists():
+            data = json.loads(ioc_file.read_text())
+            if dst in data.get('ips', {}):
+                r = data['ips'][dst]
+                result = {'is_malicious': True, 'threat_score': 90,
+                          'category': r.get('tags',['c2'])[0]}
+        print(json.dumps(result))
+        "
+    retry:
+      count: 3
+      delay: 5
+    publish:
+      dst_malicious: <% result().stdout | fromjson | get("is_malicious", false) %>
+      threat_score: <% int(result().stdout | fromjson | get("threat_score", 0)) %>
+    next:
+      - do: decide_action
+
+  check_outbound_volume:
+    action: core.local
+    input:
+      cmd: >
+        python3 -c "
+        import json
+        from pathlib import Path
+        import ipaddress
+        src = '{{ ctx().source_ip }}'
+        dst = '{{ ctx().destination_ip }}'
+        lake_file = Path('data/lake/hot/events.json')
+        result = {'total_bytes': 0, 'exfil_confirmed': False, 'flow_count': 0}
+        EXFIL_THRESHOLD = 5_000_000  # 5 MB
+        def is_private(ip):
+            try:
+                a = ipaddress.ip_address(ip)
+                return a.is_private
+            except: return True
+        if lake_file.exists():
+            try:
+                events = json.loads(lake_file.read_text())
+                outbound = [e for e in events[-5000:]
+                            if e.get('src_ip') == src
+                            and not is_private(e.get('dst_ip',''))
+                            and e.get('direction') == 'outgoing']
+                total = sum(e.get('byte_count', e.get('bytes', 0)) for e in outbound)
+                result['total_bytes'] = total
+                result['flow_count'] = len(outbound)
+                result['exfil_confirmed'] = total > EXFIL_THRESHOLD
+            except Exception as ex:
+                result['error'] = str(ex)
+        print(json.dumps(result))
+        "
+    publish:
+      bytes_transferred: <% int(result().stdout | fromjson | get("total_bytes", 0)) %>
+      exfil_confirmed: <% result().stdout | fromjson | get("exfil_confirmed", false) %>
+    next:
+      - do: decide_action
+
+  decide_action:
+    action: core.noop
+    publish:
+      final_action: >
+        <% if ctx().risk_level = "full_containment" or ctx().exfil_confirmed or ctx().dst_malicious %>contain<% else %>monitor<% endif %>
+    next:
+      - when: <% ctx().final_action = "contain" %>
+        do:
+          - block_outbound_connection
+          - suspend_user_account
+          - snapshot_system_state
+      - when: <% ctx().final_action = "monitor" %>
+        do: create_case
+
+  block_outbound_connection:
+    action: core.local
+    input:
+      cmd: >
+        python3 -c "
+        import subprocess, json, ipaddress
+        src = '{{ ctx().source_ip }}'
+        dst = '{{ ctx().destination_ip }}'
+        result = {'blocked': False, 'rules': []}
+        try:
+            for ip in [src, dst]:
+                if not ip or ip in ['', 'unknown']: continue
+                ipt = 'ip6tables' if ipaddress.ip_address(ip.split('/')[0]).version == 6 else 'iptables'
+                cmds = [
+                    [ipt,'-I','OUTPUT','-s',src,'-d',dst,'-j','DROP'],
+                    [ipt,'-I','FORWARD','-s',src,'-d',dst,'-j','DROP'],
+                ]
+                for cmd in cmds:
+                    r = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+                    result['rules'].append(r.returncode == 0)
+                break
+            result['blocked'] = any(result['rules'])
+        except Exception as e:
+            result['error'] = str(e)
+        print(json.dumps(result))
+        "
+    retry:
+      count: 3
+      delay: 5
+    publish:
+      outbound_blocked: <% result().stdout | fromjson | get("blocked", false) %>
+    next:
+      - do: create_case
+
+  suspend_user_account:
+    action: core.local
+    input:
+      cmd: >
+        python3 -c "
+        import json
+        from pathlib import Path
+        from datetime import datetime, timezone
+        uid = '{{ ctx().user_id }}'
+        users_file = Path('data/users.json')
+        result = {'suspended': False}
+        if users_file.exists() and uid:
+            users = json.loads(users_file.read_text())
+            for u in users:
+                if u.get('username') == uid:
+                    u['active'] = False
+                    u['suspended'] = True
+                    u['suspended_reason'] = 'SOAR:data_exfiltration'
+                    u['suspended_at'] = datetime.now(timezone.utc).isoformat()
+                    result['suspended'] = True
+            users_file.write_text(json.dumps(users, indent=2))
+        print(json.dumps(result))
+        "
+    publish:
+      user_suspended: <% result().stdout | fromjson | get("suspended", false) %>
+    next:
+      - do: create_case
+
+  snapshot_system_state:
+    action: core.local
+    input:
+      cmd: >
+        python3 -c "
+        import json, subprocess
+        from pathlib import Path
+        from datetime import datetime, timezone
+        snap_dir = Path('data/snapshots')
+        snap_dir.mkdir(parents=True, exist_ok=True)
+        ts = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
+        snap_file = snap_dir / f'exfil_snap_{ts}.json'
+        snapshot = {
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'alert_id': '{{ ctx().alert_id }}',
+            'source_ip': '{{ ctx().source_ip }}',
+            'bytes_transferred': {{ ctx().bytes_transferred }},
+            'netstat': '', 'processes': '', 'connections': ''
+        }
+        for cmd, key in [
+            (['ss','-tnp'], 'netstat'),
+            (['ps','aux','--sort=-rss'], 'processes'),
+        ]:
+            try:
+                r = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+                snapshot[key] = r.stdout[:5000]
+            except: pass
+        snap_file.write_text(json.dumps(snapshot, indent=2))
+        print(json.dumps({'snapshot': str(snap_file), 'ok': True}))
+        "
+    publish:
+      snapshot_path: <% result().stdout | fromjson | get("snapshot", "") %>
+    next:
+      - do: create_case
+
+  create_case:
+    action: core.local
+    input:
+      cmd: >
+        python3 -c "
+        import json, uuid
+        from pathlib import Path
+        from datetime import datetime, timezone
+        cases_file = Path('data/cases.json')
+        existing = []
+        if cases_file.exists():
+            try: existing = json.loads(cases_file.read_text())
+            except: pass
+        case_id = 'CASE-EXFL-' + uuid.uuid4().hex[:8].upper()
+        existing.append({
+            'id': case_id, 'type': 'data_exfiltration',
+            'alert_id': '{{ ctx().alert_id }}', 'user_id': '{{ ctx().user_id }}',
+            'source_ip': '{{ ctx().source_ip }}', 'destination_ip': '{{ ctx().destination_ip }}',
+            'bytes_transferred': {{ ctx().bytes_transferred }},
+            'risk_score': {{ ctx().risk_score }}, 'final_action': '{{ ctx().final_action }}',
+            'exfil_confirmed': {{ ctx().exfil_confirmed }},
+            'created_at': datetime.now(timezone.utc).isoformat(),
+            'status': 'AUTO_CLOSED',
+            'closed_at': datetime.now(timezone.utc).isoformat(),
+            'playbook': 'data_exfiltration_response'
+        })
+        cases_file.write_text(json.dumps(existing, indent=2))
+        print(json.dumps({'case_id': case_id}))
+        "
+    publish:
+      case_id: <% result().stdout | fromjson | get("case_id", "") %>
+    next:
+      - do: log_results
+
+  log_results:
+    action: core.local
+    input:
+      cmd: >
+        python3 -c "
+        import json
+        from pathlib import Path
+        from datetime import datetime, timezone
+        log_file = Path('data/soar_executions.json')
+        existing = []
+        if log_file.exists():
+            try: existing = json.loads(log_file.read_text())
+            except: pass
+        existing.append({
+            'playbook': 'data_exfiltration_response',
+            'alert_id': '{{ ctx().alert_id }}', 'risk_score': {{ ctx().risk_score }},
+            'bytes_transferred': {{ ctx().bytes_transferred }},
+            'exfil_confirmed': {{ ctx().exfil_confirmed }},
+            'final_action': '{{ ctx().final_action }}', 'case_id': '{{ ctx().case_id }}',
+            'executed_at': datetime.now(timezone.utc).isoformat()
+        })
+        log_file.write_text(json.dumps(existing[-1000:], indent=2))
+        print('logged')
+        "
+    next:
+      - do: end
+
+  log_no_action:
+    action: core.local
+    input:
+      cmd: echo "Risk {{ ctx().risk_score }} below threshold — no action for {{ ctx().alert_id }}"
+    next:
+      - do: end
+
+  end:
+    action: core.noop

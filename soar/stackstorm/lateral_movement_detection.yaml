@@ -1,0 +1,273 @@
+version: 1.0
+description: >
+  Automated lateral movement detection and containment. Triggered by CyberRemedy
+  when multiple internal connections or privilege misuse is detected across hosts.
+  Isolates compromised host, blocks internal spread, disables compromised credentials.
+
+input:
+  - alert_id
+  - user_id
+  - host_id
+  - source_ip
+  - destination_ip
+  - file_hash
+  - process_name
+  - risk_score
+  - geo_location
+  - timestamp
+
+vars:
+  risk_level: ""
+  final_action: "none"
+  lateral_confirmed: false
+  internal_hops: 0
+  case_id: ""
+
+tasks:
+  evaluate_risk:
+    action: core.noop
+    publish:
+      risk_level: >
+        <% if ctx().risk_score > 90 %>full_containment<% elif ctx().risk_score >= 70 %>conditional<% else %>exit<% endif %>
+    next:
+      - when: <% ctx().risk_level = "exit" %>
+        do: log_no_action
+      - when: <% ctx().risk_level in ["full_containment", "conditional"] %>
+        do:
+          - enrich_threat_intel
+          - check_internal_connections
+
+  enrich_threat_intel:
+    action: core.local
+    input:
+      cmd: >
+        python3 -c "
+        import json
+        from pathlib import Path
+        ip = '{{ ctx().source_ip }}'
+        result = {'is_malicious': False, 'threat_score': 0}
+        ioc_file = Path('data/ioc_store.json')
+        if ioc_file.exists():
+            data = json.loads(ioc_file.read_text())
+            if ip in data.get('ips', {}):
+                result = {'is_malicious': True, 'threat_score': 85}
+        print(json.dumps(result))
+        "
+    retry:
+      count: 3
+      delay: 5
+    publish:
+      ioc_hit: <% result().stdout | fromjson | get("is_malicious", false) %>
+    next:
+      - do: decide_action
+
+  check_internal_connections:
+    action: core.local
+    input:
+      cmd: >
+        python3 -c "
+        import json, re
+        from pathlib import Path
+        import ipaddress
+        src = '{{ ctx().source_ip }}'
+        lake_file = Path('data/lake/hot/events.json')
+        result = {'internal_hops': 0, 'lateral_confirmed': False, 'targets': []}
+        private_nets = [ipaddress.ip_network(n) for n in
+                        ['10.0.0.0/8','172.16.0.0/12','192.168.0.0/16']]
+        def is_private(ip):
+            try:
+                a = ipaddress.ip_address(ip)
+                return any(a in n for n in private_nets)
+            except: return False
+        if lake_file.exists():
+            try:
+                events = json.loads(lake_file.read_text())
+                targets = set()
+                for e in events[-2000:]:
+                    if e.get('src_ip') == src and is_private(e.get('dst_ip','')):
+                        targets.add(e['dst_ip'])
+                result['internal_hops'] = len(targets)
+                result['targets'] = list(targets)[:10]
+                result['lateral_confirmed'] = len(targets) >= 3
+            except Exception as ex:
+                result['error'] = str(ex)
+        print(json.dumps(result))
+        "
+    publish:
+      internal_hops: <% result().stdout | fromjson | get("internal_hops", 0) %>
+      lateral_confirmed: <% result().stdout | fromjson | get("lateral_confirmed", false) %>
+      lateral_targets: <% result().stdout | fromjson | get("targets", []) %>
+    next:
+      - do: decide_action
+
+  decide_action:
+    action: core.noop
+    publish:
+      final_action: >
+        <% if ctx().risk_level = "full_containment" or ctx().lateral_confirmed or ctx().ioc_hit %>contain<% else %>monitor<% endif %>
+    next:
+      - when: <% ctx().final_action = "contain" %>
+        do:
+          - isolate_source_host
+          - block_internal_spread
+          - disable_compromised_credentials
+      - when: <% ctx().final_action = "monitor" %>
+        do: create_case
+
+  isolate_source_host:
+    action: core.local
+    input:
+      cmd: >
+        python3 -c "
+        import subprocess, json, ipaddress
+        ip = '{{ ctx().source_ip }}'
+        result = {'isolated': False, 'ip': ip}
+        try:
+            ipt = 'ip6tables' if ipaddress.ip_address(ip).version == 6 else 'iptables'
+            for cmd in [
+                [ipt,'-I','INPUT','-s',ip,'-j','DROP'],
+                [ipt,'-I','FORWARD','-s',ip,'-j','DROP'],
+            ]:
+                subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            result['isolated'] = True
+        except Exception as e:
+            result['error'] = str(e)
+        print(json.dumps(result))
+        "
+    retry:
+      count: 3
+      delay: 5
+    publish:
+      host_isolated: <% result().stdout | fromjson | get("isolated", false) %>
+    next:
+      - do: create_case
+
+  block_internal_spread:
+    action: core.local
+    input:
+      cmd: >
+        python3 -c "
+        import subprocess, json, ipaddress
+        src = '{{ ctx().source_ip }}'
+        # SMB, RDP, WinRM, SSH ports used for lateral movement
+        lateral_ports = [445, 3389, 5985, 5986, 22, 135, 139]
+        result = {'blocked_ports': [], 'errors': []}
+        try:
+            ipt = 'ip6tables' if ipaddress.ip_address(src).version == 6 else 'iptables'
+            for port in lateral_ports:
+                r = subprocess.run(
+                    [ipt,'-I','FORWARD','-s',src,'-p','tcp','--dport',str(port),'-j','DROP'],
+                    capture_output=True, text=True, timeout=5
+                )
+                if r.returncode == 0:
+                    result['blocked_ports'].append(port)
+                else:
+                    result['errors'].append(f'port {port}: {r.stderr.strip()}')
+        except Exception as e:
+            result['errors'].append(str(e))
+        print(json.dumps(result))
+        "
+    retry:
+      count: 3
+      delay: 5
+    publish:
+      spread_blocked: <% len(result().stdout | fromjson | get("blocked_ports", [])) > 0 %>
+    next:
+      - do: create_case
+
+  disable_compromised_credentials:
+    action: core.local
+    input:
+      cmd: >
+        python3 -c "
+        import json
+        from pathlib import Path
+        from datetime import datetime, timezone
+        uid = '{{ ctx().user_id }}'
+        users_file = Path('data/users.json')
+        result = {'disabled': False}
+        if users_file.exists() and uid:
+            users = json.loads(users_file.read_text())
+            for u in users:
+                if u.get('username') == uid:
+                    u['active'] = False
+                    u['disabled_reason'] = 'SOAR:lateral_movement'
+                    u['disabled_at'] = datetime.now(timezone.utc).isoformat()
+                    result['disabled'] = True
+            users_file.write_text(json.dumps(users, indent=2))
+        print(json.dumps(result))
+        "
+    publish:
+      credentials_disabled: <% result().stdout | fromjson | get("disabled", false) %>
+    next:
+      - do: create_case
+
+  create_case:
+    action: core.local
+    input:
+      cmd: >
+        python3 -c "
+        import json, uuid
+        from pathlib import Path
+        from datetime import datetime, timezone
+        cases_file = Path('data/cases.json')
+        existing = []
+        if cases_file.exists():
+            try: existing = json.loads(cases_file.read_text())
+            except: pass
+        case_id = 'CASE-LATM-' + uuid.uuid4().hex[:8].upper()
+        existing.append({
+            'id': case_id, 'type': 'lateral_movement',
+            'alert_id': '{{ ctx().alert_id }}', 'source_ip': '{{ ctx().source_ip }}',
+            'user_id': '{{ ctx().user_id }}', 'risk_score': {{ ctx().risk_score }},
+            'internal_hops': {{ ctx().internal_hops }},
+            'lateral_confirmed': {{ ctx().lateral_confirmed }},
+            'final_action': '{{ ctx().final_action }}',
+            'created_at': datetime.now(timezone.utc).isoformat(),
+            'status': 'AUTO_CLOSED',
+            'closed_at': datetime.now(timezone.utc).isoformat(),
+            'playbook': 'lateral_movement_detection'
+        })
+        cases_file.write_text(json.dumps(existing, indent=2))
+        print(json.dumps({'case_id': case_id}))
+        "
+    publish:
+      case_id: <% result().stdout | fromjson | get("case_id", "") %>
+    next:
+      - do: log_results
+
+  log_results:
+    action: core.local
+    input:
+      cmd: >
+        python3 -c "
+        import json
+        from pathlib import Path
+        from datetime import datetime, timezone
+        log_file = Path('data/soar_executions.json')
+        existing = []
+        if log_file.exists():
+            try: existing = json.loads(log_file.read_text())
+            except: pass
+        existing.append({
+            'playbook': 'lateral_movement_detection',
+            'alert_id': '{{ ctx().alert_id }}', 'risk_score': {{ ctx().risk_score }},
+            'internal_hops': {{ ctx().internal_hops }},
+            'final_action': '{{ ctx().final_action }}', 'case_id': '{{ ctx().case_id }}',
+            'executed_at': datetime.now(timezone.utc).isoformat()
+        })
+        log_file.write_text(json.dumps(existing[-1000:], indent=2))
+        print('logged')
+        "
+    next:
+      - do: end
+
+  log_no_action:
+    action: core.local
+    input:
+      cmd: echo "Risk {{ ctx().risk_score }} below threshold — no action for {{ ctx().alert_id }}"
+    next:
+      - do: end
+
+  end:
+    action: core.noop

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-CyberRemedy v1.0 — Entry point
+CyberRemedy v1.2 — Entry point
 
 Usage:
   python main.py                    # Start API + dashboard (default)
@@ -106,22 +106,78 @@ def download_geoip():
     logger.warning("GeoIP: offline download failed — ip-api.com online fallback will be used (45 req/min free)")
 
 
+def _ensure_packages():
+    """Auto-install missing critical packages before starting."""
+    import subprocess, importlib
+    REQUIRED = [
+        ("fastapi",   "fastapi==0.111.0"),
+        ("uvicorn",   "uvicorn[standard]==0.29.0"),
+        ("pydantic",  "pydantic>=2.0"),
+        ("aiofiles",  "aiofiles>=23.1"),
+        ("websockets","websockets>=12.0"),
+    ]
+    missing = []
+    for mod, pkg in REQUIRED:
+        try:
+            importlib.import_module(mod)
+        except ImportError:
+            missing.append(pkg)
+    if not missing:
+        return
+    print(f"\n⚙  Auto-installing {len(missing)} missing package(s): {', '.join(missing)}")
+    print("   (Run:  sudo pip3 install -r requirements.txt  to install everything at once)\n")
+    for pkg in missing:
+        try:
+            subprocess.check_call(
+                [sys.executable, "-m", "pip", "install", pkg,
+                 "--quiet", "--break-system-packages"],
+                stderr=subprocess.DEVNULL
+            )
+            print(f"   ✅ {pkg}")
+        except subprocess.CalledProcessError:
+            try:
+                subprocess.check_call(
+                    [sys.executable, "-m", "pip", "install", pkg, "--quiet"],
+                    stderr=subprocess.DEVNULL
+                )
+                print(f"   ✅ {pkg}")
+            except Exception:
+                print(f"   ❌ Failed to install {pkg}")
+                print(f"      Fix: sudo pip3 install {pkg}")
+    # Re-check
+    still_missing = []
+    for mod, pkg in REQUIRED:
+        try:
+            importlib.import_module(mod)
+        except ImportError:
+            still_missing.append(pkg)
+    if still_missing:
+        print(f"\n❌ Still missing after install: {still_missing}")
+        print("   Run:  sudo pip3 install -r requirements.txt")
+        print("   Or:   sudo bash install_and_run.sh")
+        sys.exit(1)
+    print("   ✅ All packages ready\n")
+
 def cmd_api(args):
     ensure_dirs()
     setup_file_logging()
+    _ensure_packages()
     try:
         download_geoip()
     except Exception as e:
         logger.warning(f"GeoIP setup skipped: {e}")
 
     import uvicorn
-    logger.info(f"Starting CyberRemedy v1.0 on http://{args.host}:{args.port}")
+    logger.info(f"Starting CyberRemedy v1.2 on http://{args.host}:{args.port}")
+    print(f"\n  ✅ CyberRemedy v1.2 running")
+    print(f"  Dashboard → http://{args.host if args.host != '0.0.0.0' else 'localhost'}:{args.port}")
+    print(f"  API Docs  → http://{args.host if args.host != '0.0.0.0' else 'localhost'}:{args.port}/docs\n")
     uvicorn.run(
         "api.server:app",
         host=args.host,
         port=args.port,
         reload=False,
-        log_level="info",
+        log_level="warning",
         app_dir=str(ROOT),
     )
 
@@ -130,12 +186,29 @@ def cmd_train(args):
     ensure_dirs()
     logger.info("Training ML models …")
     sys.path.insert(0, str(ROOT))
+
+    # ── Auto-install sklearn/joblib if missing ─────────────────────────────
+    try:
+        import sklearn  # noqa: F401
+    except ImportError:
+        logger.info("scikit-learn not found — installing automatically …")
+        import subprocess
+        result = subprocess.run(
+            [sys.executable, "-m", "pip", "install", "scikit-learn", "joblib",
+             "--break-system-packages", "--quiet"],
+            capture_output=True, text=True
+        )
+        if result.returncode != 0:
+            logger.warning(f"pip install failed: {result.stderr[:300]}")
+        else:
+            logger.info("scikit-learn installed successfully")
+
     from detection.anomaly import AnomalyDetector
     import numpy as np
 
     detector = AnomalyDetector(
-        model_path="models/anomaly_model.pkl",
-        classifier_path="models/classifier_model.pkl",
+        model_path="models/anomaly_model.joblib",
+        classifier_path="models/rf_attack_model.joblib",
     )
     FEATURES = [
         "packet_count","total_bytes","bytes_per_second","packets_per_second",
@@ -153,16 +226,44 @@ def cmd_train(args):
     all_flows = benign + attack
     labels = [0]*500 + [1]*100
     detector.train(all_flows, labels)
+    logger.info("Isolation Forest + RandomForest saved to models/")
+
+    # ── Train LSTM if not already trained ─────────────────────────────────
+    from pathlib import Path as _P
+    lstm_trained = _P("models/lstm_detector.pt").exists() or _P("models/lstm_detector.keras").exists()
+    force_lstm = getattr(args, "_force_lstm", False)
+    if not lstm_trained or force_lstm:
+        logger.info("Training LSTM (NSL-KDD) — this takes ~30 s on CPU …")
+        import subprocess
+        extra = ["--retrain"] if force_lstm else []
+        result = subprocess.run(
+            [sys.executable, "ml/lstm/trainer.py"] + extra,
+            capture_output=False, text=True, timeout=600
+        )
+        if result.returncode == 0:
+            logger.info("LSTM training complete")
+        else:
+            logger.warning("LSTM training exited with non-zero code — check output above")
+    else:
+        logger.info("LSTM model already exists — skipping (use --retrain to force)")
+
     logger.info("Training complete — models saved to models/")
 
 
 
 def main():
-    p = argparse.ArgumentParser(description="CyberRemedy v1.0 SIEM")
-    p.add_argument("--host",  default="0.0.0.0")
-    p.add_argument("--port",  type=int, default=8000)
-    p.add_argument("--train", action="store_true", help="Train ML models and exit")
+    p = argparse.ArgumentParser(description="CyberRemedy v1.2 SIEM")
+    p.add_argument("--host",    default="0.0.0.0")
+    p.add_argument("--port",    type=int, default=8000)
+    p.add_argument("--train",   action="store_true", help="Train ML models and exit")
+    p.add_argument("--retrain", action="store_true", help="Force retrain all ML models (overwrite existing)")
     args = p.parse_args()
+
+    if args.retrain:
+        args.train = True   # retrain implies train
+        args._force_lstm = True
+    else:
+        args._force_lstm = False
 
     if args.train:
         cmd_train(args)

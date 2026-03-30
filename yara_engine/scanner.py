@@ -111,6 +111,47 @@ class SimpleYARARule:
 
 # ─── RULE PARSER ──────────────────────────────────────────────────────────────
 
+def _load_yar_file_rules(path) -> List["SimpleYARARule"]:
+    """Parse a .yar file into SimpleYARARule objects."""
+    import re as _re
+    rules = []
+    try:
+        text = open(path).read()
+    except Exception:
+        return rules
+
+    for block in _re.split(r'\nrule\s+', text):
+        if not block.strip(): continue
+        try:
+            name_m = _re.match(r'(\w+)', block)
+            if not name_m: continue
+            name = name_m.group(1)
+            desc_m = _re.search(r'description\s*=\s*"([^"]*)"', block)
+            sev_m  = _re.search(r'severity\s*=\s*"([^"]*)"', block)
+            mit_m  = _re.search(r'mitre\s*=\s*"([^"]*)"', block)
+            desc   = desc_m.group(1) if desc_m else ""
+            sev    = sev_m.group(1)  if sev_m  else "MEDIUM"
+            mitre  = mit_m.group(1)  if mit_m  else ""
+
+            strings = {}
+            str_block_m = _re.search(r'strings:(.*?)condition:', block, _re.DOTALL)
+            if str_block_m:
+                for sm in _re.finditer(r'\$([\w]+)\s*=\s*"([^"]*)"(\s*[a-z\s]*)?', str_block_m.group(1)):
+                    strings[sm.group(1)] = (sm.group(2), sm.group(3).strip() if sm.group(3) else "")
+
+            cond_m = _re.search(r'condition:\s*(.+?)(?:\}|$)', block, _re.DOTALL)
+            cond   = cond_m.group(1).strip().rstrip('}').strip() if cond_m else "any of them"
+            # Normalize wildcard conditions to "any of them"
+            if 'any of' in cond.lower() or 'of them' in cond.lower():
+                cond = "any of them"
+
+            if strings:
+                rules.append(SimpleYARARule(name, desc, sev, mitre, strings, cond))
+        except Exception:
+            continue
+    return rules
+
+
 def parse_builtin_rules() -> List[SimpleYARARule]:
     """Parse the built-in YARA rules text into SimpleYARARule objects."""
     rules = []
@@ -186,10 +227,23 @@ class YARAScanner:
         except ImportError:
             logger.info("YARA: yara-python not installed — using built-in pattern matcher")
             self._simple_rules = parse_builtin_rules()
+            # Also load rules from .yar files in data/yara_rules/
+            for yar_file in sorted(self.rules_dir.glob("*.yar")):
+                extra = _load_yar_file_rules(yar_file)
+                existing_names = {r.rule_name for r in self._simple_rules}
+                for r in extra:
+                    if r.rule_name not in existing_names:
+                        self._simple_rules.append(r)
             logger.info(f"YARA: {len(self._simple_rules)} built-in rules loaded")
         except Exception as e:
             logger.warning(f"YARA compile error: {e} — using pattern matcher")
             self._simple_rules = parse_builtin_rules()
+            for yar_file in sorted(self.rules_dir.glob("*.yar")):
+                extra = _load_yar_file_rules(yar_file)
+                existing_names = {r.rule_name for r in self._simple_rules}
+                for r in extra:
+                    if r.rule_name not in existing_names:
+                        self._simple_rules.append(r)
 
     def scan_bytes(self, data: bytes, source_name: str = "unknown") -> List[dict]:
         """Scan raw bytes. Returns list of match dicts."""

@@ -307,16 +307,199 @@ class CustomIOCLoader:
 
 # ─── IOC MANAGER (MAIN INTERFACE) ─────────────────────────────────────────────
 
+# ─── PUBLIC FEED CATALOG ─────────────────────────────────────────────────────
+# All free, no-key-required threat intelligence feeds.
+# Each entry: name, url, ioc_type, severity, tags, parser hint
+FEED_CATALOG = [
+    # ── Abuse.ch family ───────────────────────────────────────────────────────
+    {
+        "name": "FeodoTracker",
+        "url":  "https://feodotracker.abuse.ch/downloads/ipblocklist.csv",
+        "type": "ip",  "severity": "CRITICAL",
+        "tags": ["botnet", "c2", "feodotracker"],
+        "parse": "csv_first_col",  "skip_prefix": ["#", "dst_ip"],
+    },
+    {
+        "name": "URLhaus",
+        "url":  "https://urlhaus.abuse.ch/downloads/text_online/",
+        "type": "url", "severity": "HIGH",
+        "tags": ["malware", "urlhaus"],
+        "parse": "plain", "skip_prefix": ["#"],
+    },
+    {
+        "name": "ThreatFox-IPs",
+        "url":  "https://threatfox.abuse.ch/export/csv/ip-port/recent/",
+        "type": "ip",  "severity": "HIGH",
+        "tags": ["threatfox", "malware"],
+        "parse": "csv_col2_strip_port", "skip_prefix": ["#", '"first_seen"'],
+    },
+    {
+        "name": "ThreatFox-Domains",
+        "url":  "https://threatfox.abuse.ch/export/csv/domain/recent/",
+        "type": "domain", "severity": "HIGH",
+        "tags": ["threatfox", "malware"],
+        "parse": "csv_col2", "skip_prefix": ["#", '"first_seen"'],
+    },
+    {
+        "name": "MalwareBazaar",
+        "url":  "https://bazaar.abuse.ch/export/csv/recent/",
+        "type": "hash", "severity": "CRITICAL",
+        "tags": ["malware", "malwarebazaar"],
+        "parse": "csv_col1", "skip_prefix": ["#", '"first_seen"'],
+    },
+    # ── Emerging Threats ──────────────────────────────────────────────────────
+    {
+        "name": "ET-Compromised",
+        "url":  "https://rules.emergingthreats.net/blockrules/compromised-ips.txt",
+        "type": "ip",  "severity": "HIGH",
+        "tags": ["emerging-threats", "compromised"],
+        "parse": "plain_ip", "skip_prefix": ["#"],
+    },
+    # ── Tor exit nodes ────────────────────────────────────────────────────────
+    {
+        "name": "TorExitNodes",
+        "url":  "https://check.torproject.org/torbulkexitlist",
+        "type": "ip",  "severity": "MEDIUM",
+        "tags": ["tor", "anonymization"],
+        "parse": "plain_ip", "skip_prefix": ["#", "ExitAddress"],
+    },
+    # ── Binary Defense ────────────────────────────────────────────────────────
+    {
+        "name": "BinaryDefense",
+        "url":  "https://www.binarydefense.com/banlist.txt",
+        "type": "ip",  "severity": "HIGH",
+        "tags": ["binarydefense", "scanner", "brute-force"],
+        "parse": "plain_ip", "skip_prefix": ["#"],
+    },
+    # ── Botvrij domains ───────────────────────────────────────────────────────
+    {
+        "name": "Botvrij-Domains",
+        "url":  "https://www.botvrij.eu/data/ioclist.domain.raw",
+        "type": "domain", "severity": "HIGH",
+        "tags": ["botvrij", "malware"],
+        "parse": "plain", "skip_prefix": ["#"],
+    },
+    # ── OpenPhish ─────────────────────────────────────────────────────────────
+    {
+        "name": "OpenPhish",
+        "url":  "https://openphish.com/feed.txt",
+        "type": "url",  "severity": "HIGH",
+        "tags": ["phishing", "openphish"],
+        "parse": "plain", "skip_prefix": ["#"],
+    },
+    # ── Malware Domain List ───────────────────────────────────────────────────
+    {
+        "name": "PhishTank-Domains",
+        "url":  "https://data.phishtank.com/data/online-valid.csv",
+        "type": "url",  "severity": "HIGH",
+        "tags": ["phishing", "phishtank"],
+        "parse": "csv_col2", "skip_prefix": ["phish_id", "#"],
+    },
+    # ── Extra free high-volume feeds ─────────────────────────────────────────
+    {
+        "name": "Blocklist-de-All",
+        "url":  "https://lists.blocklist.de/lists/all.txt",
+        "type": "ip", "severity": "MEDIUM",
+        "tags": ["blocklist"], "ttl": 86400,
+    },
+    {
+        "name": "IPsum-Level3",
+        "url":  "https://raw.githubusercontent.com/stamparm/ipsum/master/levels/3.txt",
+        "type": "ip", "severity": "HIGH",
+        "tags": ["ipsum","scanner"], "ttl": 86400,
+    },
+    {
+        "name": "Emerging-Block-IPs",
+        "url":  "https://rules.emergingthreats.net/fwrules/emerging-Block-IPs.txt",
+        "type": "ip", "severity": "HIGH",
+        "tags": ["emerging-threats"], "ttl": 86400,
+    },
+    {
+        "name": "Abuse-SSLBL",
+        "url":  "https://sslbl.abuse.ch/blacklist/sslipblacklist.csv",
+        "type": "ip", "severity": "CRITICAL",
+        "tags": ["sslbl","botnet"], "ttl": 86400,
+    },
+    {
+        "name": "Greensnow",
+        "url":  "https://blocklist.greensnow.co/greensnow.txt",
+        "type": "ip", "severity": "MEDIUM",
+        "tags": ["scanner","greensnow"], "ttl": 86400,
+    },
+    {
+        "name": "CINS-Army",
+        "url":  "https://cinsscore.com/list/ci-badguys.txt",
+        "type": "ip", "severity": "HIGH",
+        "tags": ["cins","scanner"], "ttl": 86400,
+    },
+    {
+        "name": "CyberCure-IPs",
+        "url":  "https://api.cybercure.ai/feed/get_ips?type=csv",
+        "type": "ip", "severity": "HIGH",
+        "tags": ["cybercure"], "ttl": 86400,
+    },
+]
+
+# Cache file: stores last-download timestamps per feed name
+FEED_CACHE_PATH = Path("data/feed_cache.json")
+
+
+def _parse_feed_line(line: str, parse_hint: str) -> Optional[str]:
+    """
+    Extract a single IOC value from a raw line using the feed's parse hint.
+    Returns None if the line doesn't yield a valid value.
+    """
+    line = line.strip().strip('"')
+    if not line:
+        return None
+    if parse_hint == "plain":
+        return line.split()[0] if line else None
+    if parse_hint == "plain_ip":
+        try:
+            import ipaddress
+            val = line.split()[0].split(":")[0]
+            ipaddress.IPv4Address(val)
+            return val
+        except Exception:
+            return None
+    if parse_hint == "csv_first_col":
+        parts = line.split(",")
+        val = parts[0].strip().strip('"').split(":")[0]
+        try:
+            import ipaddress; ipaddress.IPv4Address(val); return val
+        except Exception:
+            return None
+    if parse_hint == "csv_col1":
+        parts = line.split(",")
+        return parts[1].strip().strip('"') if len(parts) > 1 else None
+    if parse_hint == "csv_col2":
+        parts = line.split(",")
+        return parts[2].strip().strip('"') if len(parts) > 2 else None
+    if parse_hint == "csv_col2_strip_port":
+        parts = line.split(",")
+        if len(parts) < 3:
+            return None
+        val = parts[2].strip().strip('"').split(":")[0]
+        try:
+            import ipaddress; ipaddress.IPv4Address(val); return val
+        except Exception:
+            return None
+    return line
+
+
 class IOCManager:
     """Central IOC management interface used by the detection pipeline."""
 
     def __init__(self, config: dict = None):
         cfg = config or {}
-        self.store = IOCStore()
-        self.vt = VirusTotalClient(cfg.get("virustotal_api_key"))
+        self.store  = IOCStore()
+        self.vt     = VirusTotalClient(cfg.get("virustotal_api_key"))
         self.loader = CustomIOCLoader()
         self._refresh_interval = cfg.get("refresh_interval_hours", 24) * 3600
-        self._running = False
+        self._running          = False
+        self._feed_thread: Optional[threading.Thread] = None
+        self._feed_status: dict = {}        # name → {ok, added, ts, error}
+        self._load_feed_cache()
 
         # Load any configured IOC files on startup
         for ioc_file in cfg.get("ioc_files", []):
@@ -326,8 +509,12 @@ class IOCManager:
         if cfg.get("ioc_files"):
             self.store.save()
 
-        # Seed with known bad IPs for demo
+        # Seed with known bad IPs so the system is useful immediately
         self._seed_demo_iocs()
+
+        # Auto-download all feeds in background on startup
+        if cfg.get("auto_download_feeds", True):
+            self.start_feed_refresh(background=True)
 
     def _seed_demo_iocs(self):
         """Seed a small set of demo IOCs so the system is useful out of the box."""
@@ -346,6 +533,161 @@ class IOCManager:
                 self.store.add(r)
             elif r.ioc_type == "hash" and r.value not in self.store._hashes:
                 self.store.add(r)
+
+    def _load_feed_cache(self) -> None:
+        """Load per-feed last-download timestamps from disk."""
+        try:
+            if FEED_CACHE_PATH.exists():
+                self._feed_status = json.loads(FEED_CACHE_PATH.read_text())
+        except Exception:
+            self._feed_status = {}
+
+    def _save_feed_cache(self) -> None:
+        FEED_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            FEED_CACHE_PATH.write_text(json.dumps(self._feed_status, indent=2))
+        except Exception:
+            pass
+
+    # How long to wait after startup before the first feed download begins.
+    # This gives the user time to start browsing without competing with a
+    # burst of large HTTP downloads.
+    _STARTUP_DELAY_SECONDS = 30
+
+    # Pause between consecutive feed downloads to spread bandwidth usage
+    # over time instead of hammering all 17 feeds back-to-back.
+    _INTER_FEED_SLEEP_SECONDS = 2
+
+    def start_feed_refresh(self, background: bool = True, force: bool = False) -> None:
+        """
+        Download all FEED_CATALOG feeds.
+        background=True → runs in a daemon thread (non-blocking).
+        force=True       → re-downloads even if last download was recent.
+
+        FIX: when background=True (the normal startup path) a 30-second
+        initial delay is applied before the first network request, and a
+        2-second pause is inserted between each feed.  This prevents the
+        17-feed burst from saturating the connection right at startup.
+        """
+        if self._feed_thread and self._feed_thread.is_alive():
+            logger.info("Feed refresh already in progress — skipping")
+            return
+        if background:
+            self._feed_thread = threading.Thread(
+                target=self._download_all_feeds,
+                kwargs={"force": force, "startup_delay": self._STARTUP_DELAY_SECONDS},
+                daemon=True,
+                name="ioc-feed-refresh",
+            )
+            self._feed_thread.start()
+            logger.info(
+                f"Feed refresh scheduled in background ({len(FEED_CATALOG)} feeds, "
+                f"starts in {self._STARTUP_DELAY_SECONDS}s)"
+            )
+        else:
+            self._download_all_feeds(force=force, startup_delay=0)
+
+    def _download_all_feeds(self, force: bool = False, startup_delay: int = 0) -> dict:
+        """Download every feed in FEED_CATALOG and ingest IOCs into the store.
+
+        FIX: startup_delay — sleep this many seconds before the very first
+        download so the user's internet is not impacted immediately on startup.
+        Between each feed a short _INTER_FEED_SLEEP_SECONDS pause is inserted
+        to spread bandwidth usage over time.
+        """
+        if startup_delay > 0:
+            logger.info(f"Feed refresh: waiting {startup_delay}s before first download …")
+            time.sleep(startup_delay)
+
+        results = {}
+        total_added = 0
+        now = time.time()
+        feeds_downloaded = 0  # count of feeds actually fetched this run
+
+        for feed in FEED_CATALOG:
+            name = feed["name"]
+            # Skip if downloaded within the last 6 hours (unless force)
+            last = self._feed_status.get(name, {}).get("ts", 0)
+            if not force and (now - last) < 6 * 3600:
+                logger.debug(f"Feed {name}: cached, skipping")
+                results[name] = self._feed_status.get(name, {})
+                continue
+
+            # Pause between feeds to avoid a bandwidth burst (skip before the first one)
+            if feeds_downloaded > 0:
+                time.sleep(self._INTER_FEED_SLEEP_SECONDS)
+
+            added = 0
+            error = None
+            try:
+                req = urllib.request.Request(
+                    feed["url"],
+                    headers={"User-Agent": "CyberRemedy-SOC/2.0"},
+                )
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    raw = resp.read().decode("utf-8", errors="ignore")
+
+                skip = feed.get("skip_prefix", ["#"])
+                parse_hint = feed.get("parse", "plain")
+                ioc_type   = feed["type"]
+                severity   = feed["severity"]
+                tags       = feed.get("tags", [])
+                cap        = feed.get("cap", 2000)  # max IOCs per feed
+
+                for line in raw.splitlines():
+                    line = line.strip()
+                    if not line:
+                        continue
+                    if any(line.startswith(p) for p in skip):
+                        continue
+                    val = _parse_feed_line(line, parse_hint)
+                    if not val or len(val) < 3:
+                        continue
+                    self.store.add(IOCRecord(ioc_type, val, name, severity, tags))
+                    added += 1
+                    if added >= cap:
+                        break
+
+                logger.info(f"Feed {name}: +{added} IOCs")
+                feeds_downloaded += 1
+
+            except Exception as exc:
+                error = str(exc)
+                logger.warning(f"Feed {name} failed: {exc}")
+                feeds_downloaded += 1  # still counts as attempted
+
+            entry = {
+                "ok":    error is None,
+                "added": added,
+                "ts":    now,
+                "error": error,
+            }
+            self._feed_status[name] = entry
+            results[name] = entry
+            total_added += added
+
+        if total_added > 0:
+            self.store.save()
+            logger.info(f"Feed refresh complete: +{total_added} IOCs, store total={self.store.total_count}")
+        self._save_feed_cache()
+        return results
+
+    def feed_status(self) -> list:
+        """Return per-feed download status for the dashboard."""
+        out = []
+        for feed in FEED_CATALOG:
+            name = feed["name"]
+            st   = self._feed_status.get(name, {})
+            out.append({
+                "name":     name,
+                "type":     feed["type"],
+                "ok":       st.get("ok"),
+                "added":    st.get("added", 0),
+                "ts":       st.get("ts"),
+                "error":    st.get("error"),
+                "tags":     feed.get("tags", []),
+            })
+        return out
 
     def enrich_alert(self, alert: dict) -> dict:
         """Enrich an alert with IOC match information."""
@@ -376,7 +718,11 @@ class IOCManager:
         return result
 
     def get_stats(self) -> dict:
-        return self.store.stats()
+        s = self.store.stats()
+        s["feeds_total"]     = len(FEED_CATALOG)
+        s["feeds_ok"]        = sum(1 for f in self._feed_status.values() if f.get("ok"))
+        s["feeds_refreshing"] = bool(self._feed_thread and self._feed_thread.is_alive())
+        return s
 
     def get_all(self, limit: int = 500) -> List[dict]:
         all_iocs = (
