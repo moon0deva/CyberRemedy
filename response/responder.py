@@ -16,6 +16,15 @@ from pathlib import Path
 logger = logging.getLogger("cyberremedy.response")
 
 
+def _get_ipt(ip: str) -> str:
+    """Return 'ip6tables' for IPv6 addresses, 'iptables' for IPv4."""
+    try:
+        import ipaddress
+        return "ip6tables" if ipaddress.ip_address(ip).version == 6 else "iptables"
+    except ValueError:
+        return "iptables"
+
+
 # ─── RESPONSE ACTION TYPES ────────────────────────────────────────────────────
 
 class ResponseAction:
@@ -36,18 +45,18 @@ class FirewallBackend:
         self.dry_run = dry_run
 
     def block_ip(self, ip: str) -> tuple[bool, str]:
-        cmd = f"iptables -I INPUT -s {ip} -j DROP"
+        cmd = f"{_get_ipt(ip)} -I INPUT -s {ip} -j DROP"
         return self._run(cmd, f"BLOCK {ip}")
 
     def unblock_ip(self, ip: str) -> tuple[bool, str]:
-        cmd = f"iptables -D INPUT -s {ip} -j DROP"
+        cmd = f"{_get_ipt(ip)} -D INPUT -s {ip} -j DROP"
         return self._run(cmd, f"UNBLOCK {ip}")
 
     def rate_limit(self, ip: str, limit: str = "10/min") -> tuple[bool, str]:
         cmd = (
-            f"iptables -I INPUT -s {ip} -m limit --limit {limit} "
+            f"{_get_ipt(ip)} -I INPUT -s {ip} -m limit --limit {limit} "
             f"--limit-burst 20 -j ACCEPT && "
-            f"iptables -A INPUT -s {ip} -j DROP"
+            f"{_get_ipt(ip)} -A INPUT -s {ip} -j DROP"
         )
         return self._run(cmd, f"RATE_LIMIT {ip} @ {limit}")
 

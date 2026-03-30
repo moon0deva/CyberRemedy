@@ -5,6 +5,7 @@ Inspired by Graylog Data Lake + Elastic frozen tier.
 """
 
 import json
+from utils.json_safe import safe_dumps, sanitize
 import gzip
 import shutil
 import logging
@@ -48,10 +49,14 @@ class DataLake:
                 self._hot_index = []
 
     def _save_hot(self):
-        (HOT_DIR / "events.json").write_text(json.dumps(self._hot_index[-50000:]))
+        try:
+            (HOT_DIR / "events.json").write_text(safe_dumps(self._hot_index[-50000:]))
+        except Exception as e:
+            logger.warning(f"Hot tier save error: {e}")
 
     def ingest(self, event: dict):
         """Add an event to the hot tier."""
+        event = sanitize(event)
         event.setdefault("ingested_at", datetime.utcnow().isoformat())
         event.setdefault("tier", "hot")
         self._hot_index.append(event)
@@ -114,7 +119,7 @@ class DataLake:
         if warm_events:
             date_str = now.strftime("%Y%m%d_%H%M%S")
             warm_file = WARM_DIR / f"archive_{date_str}.json"
-            warm_file.write_text(json.dumps(warm_events))
+            warm_file.write_text(safe_dumps(warm_events))
             logger.info(f"Archived {len(warm_events)} events to warm tier: {warm_file.name}")
 
         # Move old warm → cold (gzip)

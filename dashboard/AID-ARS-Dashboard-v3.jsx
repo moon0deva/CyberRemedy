@@ -26,33 +26,11 @@ const MITRE_FALLBACK = [
 ];
 const ATTACK_TYPES = ["Port Scan (SYN)","SSH Brute Force","DNS Tunneling","C2 Beaconing","Lateral Movement","Data Exfiltration","YARA Match","Honeypot Connection","UEBA Anomaly","Sigma Rule Hit"];
 
-function r(a,b){ return Math.floor(Math.random()*(b-a+1))+a; }
-const RIP = () => `${r(10,192)}.${r(0,255)}.${r(0,255)}.${r(1,254)}`;
-let _sid = 1000;
-function genAlert(){
-  const mit = MITRE_FALLBACK[r(0,MITRE_FALLBACK.length-1)];
-  const sev = SEVERITIES[r(0,3)];
-  return { id:_sid++, timestamp:new Date().toISOString(), severity:sev,
-    type:ATTACK_TYPES[r(0,ATTACK_TYPES.length-1)], src_ip:RIP(), dst_ip:RIP(),
-    dst_port:r(1,1024), protocol:["TCP","UDP","DNS","ICMP"][r(0,3)],
-    mitre_id:mit.id, mitre_name:mit.name, mitre_tactic:mit.tactic,
-    confidence:r(68,99), risk_score:r(30,95), status:"OPEN", source:"simulation",
-    correlated:Math.random()>0.6 };
-}
-function genCase(a){
-  const id = `CASE-${new Date().toISOString().slice(0,10).replace(/-/g,"")}-${Math.random().toString(36).slice(2,8).toUpperCase()}`;
-  return { id, title:`[${a.severity}] ${a.type} — ${a.src_ip}`, severity:a.severity,
-    status:"OPEN", created_at:new Date().toISOString(), assigned_to:null,
-    alert_ids:[a.id], comments:[], sla_breached:false, escalation_count:0 };
-}
-
 // ─── APP ──────────────────────────────────────────────────────────────────────
 export default function App() {
   // connection
   const [wsConnected, setWsConnected] = useState(false);
   const wsRef = useRef(null);
-  const simRef = useRef(null);
-  const tickRef = useRef(0);
 
   // core pipeline state
   const [alerts,       setAlerts]       = useState([]);
@@ -60,7 +38,7 @@ export default function App() {
   const [chains,       setChains]       = useState([]);
   const [blockedIPs,   setBlockedIPs]   = useState([]);
   const [traffic,      setTraffic]      = useState([]);
-  const [pipeline,     setPipeline]     = useState({ running:false,mode:"simulation",alerts_total:0,flows_analyzed:0,packets_processed:0 });
+  const [pipeline,     setPipeline]     = useState({ running:false,mode:"idle",alerts_total:0,flows_analyzed:0,packets_processed:0 });
   const [stats,        setStats]        = useState({ total_alerts:0,severity_breakdown:{},unique_sources:0 });
   const [mitreCov,     setMitreCov]     = useState({ techniques_detected:0,tactics_coverage:{} });
   const [mitreDB,      setMitreDB]      = useState({});
@@ -82,6 +60,24 @@ export default function App() {
   const [vulnFindings, setVulnFindings] = useState([]);
   const [timeline,     setTimeline]     = useState([]);
   const [lakeStats,    setLakeStats]    = useState({ total_records:0,size_mb:0 });
+
+  // Monitor Tools state (agentless fallback — no agent on target device)
+  const [monitorStatus,  setMonitorStatus]  = useState({ running:false, mode:"idle", packet_count:0, buffered_packets:0, dns_leaks_detected:0 });
+  const [monitorPackets, setMonitorPackets] = useState([]);
+  const [dnsLeaks,       setDnsLeaks]       = useState([]);
+  const [dnsLeakSummary, setDnsLeakSummary] = useState({ known_public:0, unknown_external:0, unique_sources:0, unique_resolvers:0 });
+  const [mitmSessions,   setMitmSessions]   = useState([]);
+  const [monitorIface,   setMonitorIface]   = useState("wlan0");
+  const [monitorTarget,  setMonitorTarget]  = useState("");
+  const [mitmTarget,     setMitmTarget]     = useState("");
+  const [mitmGateway,    setMitmGateway]    = useState("");
+  const [monitorTab,     setMonitorTab]     = useState("capture");  // capture | mitm | dns | android
+
+  // Android / mobile device identification state
+  const [androidStatus,  setAndroidStatus]  = useState({ mdns_listener:false, ssdp_listener:false, mdns_devices:0, ssdp_devices:0, mac_rand_alerts:0, unique_android:0 });
+  const [androidDevices, setAndroidDevices] = useState([]);
+  const [macRandAlerts,  setMacRandAlerts]  = useState([]);
+  const [androidIface,   setAndroidIface]   = useState("wlan0");
 
   // UI state
   const [nav,    setNav]    = useState("alerts");
@@ -137,55 +133,13 @@ export default function App() {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
     const ws = new WebSocket(WS_URL);
     wsRef.current = ws;
-    ws.onopen = () => { setWsConnected(true); if (simRef.current) { clearInterval(simRef.current); simRef.current=null; } };
+    ws.onopen = () => { setWsConnected(true); };
     ws.onmessage = e => { try { handleMsg(JSON.parse(e.data)); } catch(_){} };
-    ws.onclose = () => { setWsConnected(false); startSim(); setTimeout(connectWS, RECONNECT_DELAY); };
+    ws.onclose = () => { setWsConnected(false); setTimeout(connectWS, RECONNECT_DELAY); };
     ws.onerror = () => ws.close();
   }, [handleMsg]);
 
-  // ── SIMULATION FALLBACK ────────────────────────────────────────────────────
-  const startSim = useCallback(() => {
-    if (simRef.current) return;
-    setAlerts(Array.from({length:15}, genAlert).reverse());
-    setTraffic(Array.from({length:40},(_,i)=>({ t:i,benign:r(200,1200),malicious:r(0,150),total:r(600,1800) })));
-    setCases(Array.from({length:3},(_,i)=>genCase(genAlert())));
-    setPlaybooks([
-      { id:"pb-001",name:"Auto Block CRITICAL",trigger_severity:["CRITICAL"],enabled:true,run_count:12 },
-      { id:"pb-002",name:"Rate Limit HIGH",trigger_severity:["HIGH"],enabled:true,run_count:5 },
-    ]);
-    setSigmaRules([
-      { id:"sr-001",name:"PowerShell Download Cradle",source:"SigmaHQ",enabled:true,hits:3 },
-      { id:"sr-002",name:"Suspicious Network Scan",source:"manual",enabled:true,hits:7 },
-    ]);
-    setYaraRules([
-      { id:"yr-001",name:"Mirai Botnet Payload",enabled:true,hits:0 },
-      { id:"yr-002",name:"Cobalt Strike Beacon",enabled:true,hits:1 },
-    ]);
-    setUebaAnomaly([
-      { entity:"10.0.0.5",type:"Off-hours access",deviation:3.2,ts:new Date().toISOString() },
-      { entity:"192.168.1.100",type:"Port sweep anomaly",deviation:4.7,ts:new Date().toISOString() },
-    ]);
-    setHoneypotEvts([
-      { src_ip:"203.0.113.5",service:"SSH",port:2222,ts:new Date().toISOString() },
-    ]);
-    setHoneypotStat({ connections:3,unique_attackers:2,running:true });
-
-    simRef.current = setInterval(() => {
-      tickRef.current++;
-      if (tickRef.current % 4 === 0) {
-        const a = genAlert();
-        setAlerts(prev=>[a,...prev].slice(0,200));
-        if (a.severity === "CRITICAL") {
-          const c = genCase(a); setCases(prev=>[c,...prev].slice(0,50));
-          setResponses(prev=>[{ action_type:"BLOCK_IP",detail:`Auto-blocked ${a.src_ip}`,timestamp:new Date().toISOString(),success:true,target_ip:a.src_ip },...prev].slice(0,50));
-          setHoneypotEvts(prev=>[{ src_ip:a.src_ip,service:"HTTP",port:8080,ts:new Date().toISOString() },...prev].slice(0,30));
-        }
-      }
-      setTraffic(prev=>[...prev.slice(-59),{ t:tickRef.current,benign:r(200,1200),malicious:r(0,150),total:r(600,1800) }]);
-    },1000);
-  },[]);
-
-  useEffect(() => { startSim(); connectWS(); return () => { if(simRef.current)clearInterval(simRef.current); wsRef.current?.close(); }; },[]);
+  useEffect(() => { connectWS(); return () => { wsRef.current?.close(); }; },[]);
 
   // ── API HELPERS ────────────────────────────────────────────────────────────
   const api = useCallback(async (method, path, body) => {
@@ -212,7 +166,10 @@ export default function App() {
   const ackAlert = useCallback((id) => setAcked(prev=>new Set([...prev,id])),[]);
 
   const createCase = useCallback((a) => {
-    const c = genCase(a);
+    const id = `CASE-${new Date().toISOString().slice(0,10).replace(/-/g,"")}-${a.id}`;
+    const c = { id, title:`[${a.severity}] ${a.type} — ${a.src_ip}`, severity:a.severity,
+      status:"OPEN", created_at:new Date().toISOString(), assigned_to:null,
+      alert_ids:[a.id], comments:[], sla_breached:false, escalation_count:0 };
     setCases(prev=>[c,...prev]);
     setAlerts(prev=>prev.map(x=>x.id===a.id?{...x,has_case:true}:x));
     api("POST","/api/cases/from-alert/"+a.id);
@@ -255,6 +212,90 @@ export default function App() {
     setYaraInput(""); setYaraName("");
   },[yaraInput,yaraName,api]);
 
+  // ── MONITOR TOOLS API ACTIONS ──────────────────────────────────────────────
+  const monitorPoll = useCallback(async () => {
+    const [status, pkts, leaks, mitm] = await Promise.all([
+      api("GET", "/api/monitor/status"),
+      api("GET", "/api/monitor/packets?limit=50"),
+      api("GET", "/api/monitor/dns/leaks?limit=100"),
+      api("GET", "/api/monitor/mitm/status"),
+    ]);
+    if (status)  setMonitorStatus(status);
+    if (pkts?.packets)   setMonitorPackets(pkts.packets.slice().reverse());
+    if (leaks?.leaks)  { setDnsLeaks(leaks.leaks.slice().reverse()); setDnsLeakSummary(leaks.summary||{}); }
+    if (mitm?.sessions)  setMitmSessions(mitm.sessions);
+  }, [api]);
+
+  const monitorStart = useCallback(async () => {
+    const r = await api("POST", "/api/monitor/start", { interface:monitorIface, target_ip:monitorTarget });
+    if (r) { setMonitorStatus(s=>({...s, running:r.ok||false, mode:r.mode||"starting"})); monitorPoll(); }
+  }, [api, monitorIface, monitorTarget, monitorPoll]);
+
+  const monitorStop = useCallback(async () => {
+    const r = await api("POST", "/api/monitor/stop");
+    if (r) { setMonitorStatus(s=>({...s, running:false, mode:"idle"})); }
+  }, [api]);
+
+  const mitmStart = useCallback(async () => {
+    if (!mitmTarget || !mitmGateway) return;
+    const r = await api("POST", "/api/monitor/mitm/start", { target_ip:mitmTarget, gateway_ip:mitmGateway, interface:monitorIface });
+    if (r?.ok) { monitorPoll(); }
+  }, [api, mitmTarget, mitmGateway, monitorIface, monitorPoll]);
+
+  const mitmStop = useCallback(async (ip) => {
+    await api("POST", "/api/monitor/mitm/stop", { target_ip:ip });
+    monitorPoll();
+  }, [api, monitorPoll]);
+
+  const clearDnsLeaks = useCallback(async () => {
+    await api("DELETE", "/api/monitor/dns/leaks");
+    setDnsLeaks([]); setDnsLeakSummary({ known_public:0, unknown_external:0, unique_sources:0, unique_resolvers:0 });
+  }, [api]);
+
+  // ── ANDROID / MOBILE IDENTIFICATION API ACTIONS ───────────────────────────
+  const androidPoll = useCallback(async () => {
+    const [status, devices, macRand] = await Promise.all([
+      api("GET", "/api/monitor/android/status"),
+      api("GET", "/api/monitor/android/devices"),
+      api("GET", "/api/monitor/android/mac-randomisation?limit=50"),
+    ]);
+    if (status)           setAndroidStatus(status);
+    if (devices?.devices) setAndroidDevices(devices.devices);
+    if (macRand?.alerts)  setMacRandAlerts(macRand.alerts);
+  }, [api]);
+
+  const androidStart = useCallback(async () => {
+    const r = await api("POST", "/api/monitor/android/start", { interface: androidIface });
+    if (r?.ok) { setAndroidStatus(s=>({...s, mdns_listener:true, ssdp_listener:true})); androidPoll(); }
+  }, [api, androidIface, androidPoll]);
+
+  const androidStop = useCallback(async () => {
+    await api("POST", "/api/monitor/android/stop");
+    setAndroidStatus(s=>({...s, mdns_listener:false, ssdp_listener:false}));
+  }, [api]);
+
+  const clearAndroid = useCallback(async () => {
+    await api("DELETE", "/api/monitor/android/devices");
+    setAndroidDevices([]); setMacRandAlerts([]);
+    setAndroidStatus(s=>({...s, mdns_devices:0, ssdp_devices:0, mac_rand_alerts:0, unique_android:0}));
+  }, [api]);
+
+  // Poll android data every 4s when on monitor panel → android tab
+  useEffect(() => {
+    if (nav !== "monitor" || monitorTab !== "android") return;
+    androidPoll();
+    const id = setInterval(androidPoll, 4000);
+    return () => clearInterval(id);
+  }, [nav, monitorTab, androidPoll]);
+
+  // Auto-poll monitor status every 3s when on that panel
+  useEffect(() => {
+    if (nav !== "monitor") return;
+    monitorPoll();
+    const id = setInterval(monitorPoll, 3000);
+    return () => clearInterval(id);
+  }, [nav, monitorPoll]);
+
   const startHoneypot = useCallback(() => {
     api("POST","/api/honeypot/start");
     setHoneypotStat(prev=>({...prev,running:true}));
@@ -269,6 +310,21 @@ export default function App() {
   // ── DERIVED ────────────────────────────────────────────────────────────────
   const openAlerts = alerts.filter(a=>!acked.has(a.id)&&a.status!=="BLOCKED");
   const criticalCount = openAlerts.filter(a=>a.severity==="CRITICAL").length;
+
+  // ── DISCONNECTED BANNER ────────────────────────────────────────────────────
+  const DisconnectedBanner = () => !wsConnected ? (
+    <div style={{ margin:"0 0 12px",padding:"10px 14px",background:"rgba(255,214,10,.06)",
+      border:"1px solid rgba(255,214,10,.2)",borderRadius:6,
+      display:"flex",alignItems:"center",gap:10,fontSize:10,color:"#ffd60a",
+      fontFamily:"'JetBrains Mono',monospace" }}>
+      <span style={{ fontSize:14 }}>◌</span>
+      <span>
+        <strong>Backend not connected</strong> — make sure CyberRemedy is running:&nbsp;
+        <span style={{ color:"#c8dde8" }}>sudo python3 main.py</span>
+        &nbsp;then data will populate automatically via WebSocket.
+      </span>
+    </div>
+  ) : null;
 
   // ── RENDER HELPERS ─────────────────────────────────────────────────────────
   const SevBadge = ({sev}) => (
@@ -372,7 +428,7 @@ export default function App() {
             background:wsConnected?"rgba(48,209,88,.12)":"rgba(255,214,10,.12)",
             color:wsConnected?"#30d158":"#ffd60a",
             border:`1px solid ${wsConnected?"rgba(48,209,88,.3)":"rgba(255,214,10,.3)"}` }}>
-            {wsConnected?"● LIVE":"◌ SIMULATION"}
+            {wsConnected?"● LIVE":"◌ DISCONNECTED"}
           </div>
           <span style={{ fontSize:9,color:"#2a4a5a",fontFamily:"'JetBrains Mono',monospace" }}>
             {new Date().toLocaleTimeString()}
@@ -427,12 +483,14 @@ export default function App() {
 
         <div className="nav-sec">Platform</div>
         {[
+          { id:"monitor", icon:"📡", label:"Monitor Tools", badge: (dnsLeaks.length + (androidStatus.unique_android||0)) || undefined },
           { id:"compliance", icon:"✅", label:"Compliance" },
           { id:"datalake",   icon:"🗄",  label:"Data Lake" },
           { id:"reports",    icon:"📋", label:"Reports" },
         ].map(n=>(
           <div key={n.id} className={`nav-item${nav===n.id?" active":""}`} onClick={()=>setNav(n.id)}>
             <span style={{ fontSize:13 }}>{n.icon}</span>{n.label}
+            {n.badge ? <span className="nav-badge">{n.badge}</span> : null}
           </div>
         ))}
 
@@ -440,7 +498,7 @@ export default function App() {
         {/* Pipeline controls */}
         <div style={{ padding:"10px 10px",borderTop:"1px solid #0d1a26" }}>
           <button className={`btn ${pipeline.running?"btn-red":"btn-green"}`} style={{ width:"100%",marginBottom:4 }}
-            onClick={()=>api("POST", pipeline.running?"/api/pipeline/stop":"/api/pipeline/start?mode=simulation")}>
+            onClick={()=>api("POST", pipeline.running?"/api/pipeline/stop":"/api/pipeline/start")}>
             {pipeline.running?"⏹ Stop Pipeline":"▶ Start Pipeline"}
           </button>
           <div style={{ fontSize:9,color:"#2a4a5a",textAlign:"center",fontFamily:"'JetBrains Mono',monospace" }}>
@@ -451,6 +509,7 @@ export default function App() {
 
       {/* ── MAIN ── */}
       <main style={{ gridArea:"main",overflowY:"auto",padding:"16px",background:"#04080f" }}>
+        <DisconnectedBanner />
 
         {/* ALERTS */}
         {nav==="alerts" && (
@@ -1045,12 +1104,435 @@ export default function App() {
           </div>
         )}
 
-        {/* REPORTS */}
+        {/* MONITOR TOOLS — Agentless fallback capture (no agent on Laptop B) */}
+        {nav==="monitor" && (
+          <div className="slide-in">
+
+            {/* Status bar */}
+            <div className="tag-sec" style={{ gridTemplateColumns:"repeat(5,1fr)" }}>
+              <StatCard label="Capture Mode"    val={monitorStatus.mode?.toUpperCase()||"IDLE"}   color={monitorStatus.running?"#30d158":"#4a6a7a"} />
+              <StatCard label="Packets Seen"    val={monitorStatus.packet_count||0}               color="#00c2ff" />
+              <StatCard label="DNS Leaks"       val={monitorStatus.dns_leaks_detected||dnsLeaks.length||0} color={dnsLeaks.length>0?"#ff3b5c":"#30d158"} />
+              <StatCard label="MITM Sessions"   val={mitmSessions.length}                         color={mitmSessions.length>0?"#ffd60a":"#4a6a7a"} />
+              <StatCard label="Android/Mobile"  val={androidStatus.unique_android||androidDevices.length||0} color={androidDevices.length>0?"#30d158":"#4a6a7a"} />
+            </div>
+
+            {/* Sub-tabs */}
+            <div style={{ display:"flex",gap:6,marginBottom:12 }}>
+              {[["capture","📡 Passive Capture"],["mitm","🎯 ARP MITM Fallback"],["dns","🔍 DNS Leak Monitor"],["android","📱 Android / Mobile"]].map(([t,l])=>(
+                <button key={t} className={`btn ${monitorTab===t?"btn-cyan":""}`}
+                  style={{ border:monitorTab===t?"1px solid rgba(0,194,255,.4)":"1px solid #1a2a3a",
+                    color:monitorTab===t?"#00c2ff":"#4a6a7a",
+                    background:monitorTab===t?"rgba(0,194,255,.08)":"transparent",
+                    fontSize:10,padding:"5px 14px" }}
+                  onClick={()=>setMonitorTab(t)}>{l}</button>
+              ))}
+            </div>
+
+            {/* ── TAB: Passive Monitor Capture ── */}
+            {monitorTab==="capture" && (<>
+              <div className="panel">
+                <div className="panel-title">Option 1 — Monitor-Mode Passive Capture</div>
+                <div style={{ fontSize:10,color:"#4a6a7a",marginBottom:12,lineHeight:1.6 }}>
+                  Captures <strong style={{ color:"#c8dde8" }}>all traffic</strong> on the local interface including Laptop B (Windows 10, no agent).
+                  Requires a Wi-Fi adapter capable of monitor mode, or a switched network with port mirroring.
+                  Falls back automatically: <span style={{ color:"#00c2ff",fontFamily:"'JetBrains Mono',monospace" }}>scapy → AF_PACKET → tcpdump</span>
+                </div>
+                <div style={{ display:"flex",gap:8,flexWrap:"wrap",marginBottom:10 }}>
+                  <div style={{ flex:1,minWidth:140 }}>
+                    <div style={{ fontSize:9,color:"#2a4a5a",marginBottom:4,letterSpacing:"1px" }}>INTERFACE</div>
+                    <input className="input" placeholder="wlan0mon / eth0 / auto"
+                      value={monitorIface} onChange={e=>setMonitorIface(e.target.value)} />
+                  </div>
+                  <div style={{ flex:1,minWidth:140 }}>
+                    <div style={{ fontSize:9,color:"#2a4a5a",marginBottom:4,letterSpacing:"1px" }}>TARGET IP (optional)</div>
+                    <input className="input" placeholder="192.168.1.105 — leave blank for all"
+                      value={monitorTarget} onChange={e=>setMonitorTarget(e.target.value)} />
+                  </div>
+                </div>
+                <div style={{ display:"flex",gap:8 }}>
+                  {!monitorStatus.running ? (
+                    <button className="btn btn-green" onClick={monitorStart}>▶ Start Capture</button>
+                  ) : (
+                    <button className="btn btn-red" onClick={monitorStop}>⏹ Stop Capture</button>
+                  )}
+                  <div style={{ display:"flex",alignItems:"center",gap:6,fontSize:10,
+                    color:monitorStatus.running?"#30d158":"#4a6a7a",
+                    fontFamily:"'JetBrains Mono',monospace" }}>
+                    <div style={{ width:6,height:6,borderRadius:"50%",
+                      background:monitorStatus.running?"#30d158":"#3a5a6a",
+                      boxShadow:monitorStatus.running?"0 0 8px #30d158":undefined }}
+                      className={monitorStatus.running?"pulse":""} />
+                    {monitorStatus.running ? `LIVE · ${monitorStatus.mode}` : "IDLE"}
+                  </div>
+                </div>
+              </div>
+
+              {/* Packet buffer */}
+              <div className="panel">
+                <div className="panel-title" style={{ display:"flex",justifyContent:"space-between" }}>
+                  <span>Captured Packets ({monitorPackets.length} buffered)</span>
+                  <span style={{ fontSize:9,color:"#3a5a6a",fontFamily:"'JetBrains Mono',monospace" }}>feeds detection pipeline</span>
+                </div>
+                {monitorPackets.length === 0 ? (
+                  <div style={{ color:"#2a4a5a",fontSize:10,fontFamily:"'JetBrains Mono',monospace",padding:"10px 0" }}>
+                    No packets captured yet. Start capture above.
+                  </div>
+                ) : (
+                  <table className="tbl">
+                    <thead><tr>
+                      <th>TIME</th><th>SRC</th><th>DST</th><th>PROTO</th><th>DIR</th><th>LEN</th>
+                    </tr></thead>
+                    <tbody>
+                      {monitorPackets.slice(0,40).map((p,i)=>(
+                        <tr key={i}>
+                          <td style={{ fontFamily:"'JetBrains Mono',monospace",fontSize:9,color:"#3a5a6a" }}>
+                            {p.timestamp ? new Date(p.timestamp).toLocaleTimeString() : "—"}
+                          </td>
+                          <td style={{ fontFamily:"'JetBrains Mono',monospace",fontSize:10,color:"#ff6b35" }}>{p.src_ip}</td>
+                          <td style={{ fontFamily:"'JetBrains Mono',monospace",fontSize:10,color:"#8aaabb"  }}>{p.dst_ip}</td>
+                          <td><span className="chip" style={{ background:"rgba(0,194,255,.08)",color:"#00c2ff",border:"1px solid rgba(0,194,255,.2)" }}>{p.protocol}</span></td>
+                          <td><span className="chip" style={{
+                            background:p.direction==="monitored"?"rgba(124,92,191,.15)":
+                                       p.direction==="outgoing" ?"rgba(255,107,53,.1)":"rgba(48,209,88,.08)",
+                            color:     p.direction==="monitored"?"#7c5cbf":
+                                       p.direction==="outgoing" ?"#ff6b35":"#30d158",
+                            border:`1px solid ${p.direction==="monitored"?"rgba(124,92,191,.3)":
+                                                p.direction==="outgoing"?"rgba(255,107,53,.3)":"rgba(48,209,88,.2)"}` }}>
+                            {(p.direction||"—").toUpperCase()}
+                          </span></td>
+                          <td style={{ fontFamily:"'JetBrains Mono',monospace",fontSize:10,color:"#4a6a7a" }}>{p.length||"—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </>)}
+
+            {/* ── TAB: ARP MITM Fallback ── */}
+            {monitorTab==="mitm" && (<>
+              <div className="panel">
+                <div className="panel-title">Option 2 — ARP Poisoning MITM (Fallback)</div>
+                <div style={{ fontSize:10,color:"#4a6a7a",marginBottom:12,lineHeight:1.6 }}>
+                  When monitor mode fails, redirect Laptop B's traffic through Laptop A using ARP cache poisoning.
+                  Works on wired and wireless networks — <strong style={{ color:"#ffd60a" }}>no agent required on Laptop B</strong>.
+                  IP forwarding is enabled automatically so Laptop B stays connected.
+                  <div style={{ marginTop:6,padding:"6px 10px",background:"rgba(255,214,10,.06)",
+                    border:"1px solid rgba(255,214,10,.15)",borderRadius:4,color:"#ffd60a",fontSize:9,fontFamily:"'JetBrains Mono',monospace" }}>
+                    ⚠ Only use on networks you own and have permission to test.
+                    Does NOT decrypt HTTPS/TLS or VPN tunnels — metadata + DNS still visible.
+                  </div>
+                </div>
+                <div style={{ display:"flex",gap:8,flexWrap:"wrap",marginBottom:10 }}>
+                  <div style={{ flex:1,minWidth:140 }}>
+                    <div style={{ fontSize:9,color:"#2a4a5a",marginBottom:4,letterSpacing:"1px" }}>TARGET IP (Laptop B)</div>
+                    <input className="input" placeholder="192.168.1.105"
+                      value={mitmTarget} onChange={e=>setMitmTarget(e.target.value)} />
+                  </div>
+                  <div style={{ flex:1,minWidth:140 }}>
+                    <div style={{ fontSize:9,color:"#2a4a5a",marginBottom:4,letterSpacing:"1px" }}>GATEWAY IP (router)</div>
+                    <input className="input" placeholder="192.168.1.1"
+                      value={mitmGateway} onChange={e=>setMitmGateway(e.target.value)} />
+                  </div>
+                </div>
+                <button className="btn btn-amber" onClick={mitmStart}
+                  disabled={!mitmTarget||!mitmGateway}
+                  style={{ opacity:(!mitmTarget||!mitmGateway)?0.4:1 }}>
+                  🎯 Start ARP MITM
+                </button>
+              </div>
+
+              {/* Active sessions */}
+              <div className="panel">
+                <div className="panel-title">Active MITM Sessions ({mitmSessions.length})</div>
+                {mitmSessions.length === 0 ? (
+                  <div style={{ color:"#2a4a5a",fontSize:10,fontFamily:"'JetBrains Mono',monospace",padding:"10px 0" }}>
+                    No active sessions. Configure target + gateway above.
+                  </div>
+                ) : (
+                  <table className="tbl">
+                    <thead><tr><th>TARGET</th><th>GATEWAY</th><th>MAC</th><th>PKTS</th><th>STATUS</th><th></th></tr></thead>
+                    <tbody>
+                      {mitmSessions.map((s,i)=>(
+                        <tr key={i}>
+                          <td style={{ fontFamily:"'JetBrains Mono',monospace",color:"#ff6b35",fontSize:10 }}>{s.target_ip}</td>
+                          <td style={{ fontFamily:"'JetBrains Mono',monospace",color:"#8aaabb",fontSize:10  }}>{s.gateway_ip}</td>
+                          <td style={{ fontFamily:"'JetBrains Mono',monospace",color:"#4a6a7a",fontSize:9   }}>{s.target_mac||"—"}</td>
+                          <td style={{ fontFamily:"'JetBrains Mono',monospace",color:"#00c2ff",fontSize:11  }}>{s.packet_count||0}</td>
+                          <td>
+                            <span className={`chip ${s.running?"pulse":""}`} style={{
+                              background:s.running?"rgba(48,209,88,.12)":"rgba(255,59,92,.1)",
+                              color:s.running?"#30d158":"#ff3b5c",
+                              border:`1px solid ${s.running?"rgba(48,209,88,.3)":"rgba(255,59,92,.3)"}` }}>
+                              {s.running?"ACTIVE":"STOPPED"}
+                            </span>
+                          </td>
+                          <td><button className="btn btn-red" style={{ fontSize:9,padding:"3px 8px" }}
+                            onClick={()=>mitmStop(s.target_ip)}>Stop</button></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </>)}
+
+            {/* ── TAB: DNS Leak Monitor ── */}
+            {monitorTab==="dns" && (<>
+              <div className="tag-sec" style={{ gridTemplateColumns:"repeat(4,1fr)" }}>
+                <StatCard label="Known Public"     val={dnsLeakSummary.known_public||0}     color="#ff3b5c"  sub="8.8.8.8 / 1.1.1.1 etc" />
+                <StatCard label="Unknown External" val={dnsLeakSummary.unknown_external||0} color="#ff6b35"  sub="Custom resolvers" />
+                <StatCard label="Unique Sources"   val={dnsLeakSummary.unique_sources||0}   color="#ffd60a"  sub="Leaking devices" />
+                <StatCard label="Unique Resolvers" val={dnsLeakSummary.unique_resolvers||0} color="#7c5cbf"  sub="External resolvers seen" />
+              </div>
+
+              <div className="panel">
+                <div className="panel-title" style={{ display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+                  <span>DNS Resolver Bypass Log — T1071</span>
+                  <div style={{ display:"flex",gap:6 }}>
+                    <button className="btn btn-cyan" style={{ fontSize:9 }} onClick={monitorPoll}>↻ Refresh</button>
+                    <button className="btn btn-red"  style={{ fontSize:9 }} onClick={clearDnsLeaks}>Clear Log</button>
+                  </div>
+                </div>
+                <div style={{ fontSize:10,color:"#4a6a7a",marginBottom:10,lineHeight:1.5 }}>
+                  Detects DNS queries sent directly to public resolvers (8.8.8.8, 1.1.1.1 etc.) instead of the LAN gateway.
+                  Indicates VPN misconfiguration, split-tunnel leak, or deliberate policy bypass.
+                  Alerts are also raised in the main detection pipeline (MITRE T1071).
+                </div>
+                {dnsLeaks.length === 0 ? (
+                  <div style={{ color:"#30d158",fontSize:10,fontFamily:"'JetBrains Mono',monospace",
+                    padding:"12px",textAlign:"center",background:"rgba(48,209,88,.04)",
+                    border:"1px solid rgba(48,209,88,.1)",borderRadius:4 }}>
+                    ✓ No DNS leaks detected — all queries going to expected resolver
+                  </div>
+                ) : (
+                  <table className="tbl">
+                    <thead><tr><th>TIME</th><th>SOURCE</th><th>RESOLVER</th><th>QUERY</th><th>TYPE</th><th>SEV</th></tr></thead>
+                    <tbody>
+                      {dnsLeaks.slice(0,60).map((e,i)=>(
+                        <tr key={i}>
+                          <td style={{ fontFamily:"'JetBrains Mono',monospace",fontSize:9,color:"#3a5a6a" }}>
+                            {e.timestamp ? new Date(e.timestamp).toLocaleTimeString() : "—"}
+                          </td>
+                          <td style={{ fontFamily:"'JetBrains Mono',monospace",color:"#ff6b35",fontSize:10 }}>{e.src_ip}</td>
+                          <td style={{ fontFamily:"'JetBrains Mono',monospace",color:"#ff3b5c",fontSize:10 }}>{e.dst_ip}</td>
+                          <td style={{ fontFamily:"'JetBrains Mono',monospace",color:"#8aaabb",fontSize:9,maxWidth:140,overflow:"hidden",textOverflow:"ellipsis" }}>
+                            {e.dns_query||"—"}
+                          </td>
+                          <td><span className="chip" style={{
+                            background:e.leak_type==="known_public"?"rgba(255,59,92,.1)":"rgba(255,107,53,.1)",
+                            color:e.leak_type==="known_public"?"#ff3b5c":"#ff6b35",
+                            border:`1px solid ${e.leak_type==="known_public"?"rgba(255,59,92,.3)":"rgba(255,107,53,.3)"}` }}>
+                            {e.leak_type==="known_public"?"PUBLIC":"UNKNOWN"}
+                          </span></td>
+                          <td><span className="chip" style={{
+                            background:SEV_BG[e.severity]||SEV_BG.LOW,
+                            color:SEV_COLOR[e.severity]||SEV_COLOR.LOW,
+                            border:`1px solid ${SEV_COLOR[e.severity]||SEV_COLOR.LOW}33` }}>
+                            {e.severity}
+                          </span></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              {/* Context */}
+              <div className="panel">
+                <div className="panel-title">How DNS Leaks Are Detected</div>
+                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
+                  {[
+                    ["Rule",       "rule_dns_leak() in detection/signature.py"],
+                    ["MITRE",      "T1071 — Application Layer Protocol"],
+                    ["Severity",   "MEDIUM (public DNS) / LOW (unknown external)"],
+                    ["Trigger",    "Any DNS UDP/53 to non-LAN resolver"],
+                    ["Also fires", "Alerts in Live Alerts panel + Case auto-create"],
+                    ["Fix",        "Force DNS to LAN gateway or use DoH on VPN"],
+                  ].map(([k,v])=>(
+                    <div key={k} style={{ padding:"8px 10px",background:"#070e17",borderRadius:5,
+                      borderLeft:"2px solid #1a3a4a" }}>
+                      <div style={{ fontSize:9,color:"#2a4a5a",marginBottom:3,letterSpacing:"1px" }}>{k.toUpperCase()}</div>
+                      <div style={{ fontSize:10,color:"#8aaabb",fontFamily:"'JetBrains Mono',monospace" }}>{v}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>)}
+
+            {/* ── TAB: Android / Mobile ── */}
+            {monitorTab==="android" && (<>
+
+              {/* Status cards */}
+              <div className="tag-sec" style={{ gridTemplateColumns:"repeat(4,1fr)" }}>
+                <StatCard label="Android Devices" val={androidStatus.unique_android||0}   color="#30d158"  sub="mDNS + SSDP identified" />
+                <StatCard label="mDNS Devices"    val={androidStatus.mdns_devices||0}    color="#00c2ff"  sub="via DNS-SD :5353" />
+                <StatCard label="SSDP Devices"    val={androidStatus.ssdp_devices||0}    color="#7c5cbf"  sub="via UPnP :1900" />
+                <StatCard label="MAC Randomised"  val={androidStatus.mac_rand_alerts||0} color={androidStatus.mac_rand_alerts>0?"#ffd60a":"#4a6a7a"} sub="Android 10+ / iOS 14+" />
+              </div>
+
+              {/* Listener controls */}
+              <div className="panel">
+                <div className="panel-title">mDNS + SSDP Listeners — Android Identification</div>
+                <div style={{ fontSize:10,color:"#4a6a7a",marginBottom:12,lineHeight:1.6 }}>
+                  Android broadcasts its <strong style={{ color:"#c8dde8" }}>real device name</strong> over mDNS (port 5353)
+                  and its <strong style={{ color:"#c8dde8" }}>Android version</strong> over SSDP (port 1900) regardless of MAC randomisation.
+                  These are multicast protocols — no agent, no root, no touch required on the handset.
+                  <div style={{ marginTop:6,display:"flex",gap:16,fontSize:9,fontFamily:"'JetBrains Mono',monospace",color:"#3a5a6a" }}>
+                    <span style={{ color:androidStatus.mdns_listener?"#30d158":"#3a5a6a" }}>
+                      {androidStatus.mdns_listener?"● mDNS :5353 ACTIVE":"○ mDNS :5353 IDLE"}
+                    </span>
+                    <span style={{ color:androidStatus.ssdp_listener?"#30d158":"#3a5a6a" }}>
+                      {androidStatus.ssdp_listener?"● SSDP :1900 ACTIVE":"○ SSDP :1900 IDLE"}
+                    </span>
+                  </div>
+                </div>
+                <div style={{ display:"flex",gap:8,alignItems:"center",flexWrap:"wrap" }}>
+                  <div style={{ minWidth:140 }}>
+                    <div style={{ fontSize:9,color:"#2a4a5a",marginBottom:4,letterSpacing:"1px" }}>INTERFACE</div>
+                    <input className="input" style={{ width:140 }} placeholder="wlan0"
+                      value={androidIface} onChange={e=>setAndroidIface(e.target.value)} />
+                  </div>
+                  {!androidStatus.mdns_listener ? (
+                    <button className="btn btn-green" style={{ marginTop:14 }} onClick={androidStart}>▶ Start Listeners</button>
+                  ) : (
+                    <button className="btn btn-red" style={{ marginTop:14 }} onClick={androidStop}>⏹ Stop Listeners</button>
+                  )}
+                  <button className="btn btn-cyan" style={{ marginTop:14 }} onClick={androidPoll}>↻ Refresh</button>
+                  <button className="btn btn-red"  style={{ marginTop:14, fontSize:9 }} onClick={clearAndroid}>Clear All</button>
+                </div>
+              </div>
+
+              {/* Device table — mDNS + SSDP merged */}
+              <div className="panel">
+                <div className="panel-title" style={{ display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+                  <span>Identified Devices ({androidDevices.length})</span>
+                  <span style={{ fontSize:9,color:"#3a5a6a",fontFamily:"'JetBrains Mono',monospace" }}>
+                    hostname + USN survive MAC randomisation
+                  </span>
+                </div>
+                {androidDevices.length === 0 ? (
+                  <div style={{ color:"#2a4a5a",fontSize:10,fontFamily:"'JetBrains Mono',monospace",padding:"12px 0" }}>
+                    No devices detected yet. Start listeners and wait for the Android device to broadcast.
+                    Most Android devices broadcast mDNS/SSDP within 30s of joining the network.
+                  </div>
+                ) : (
+                  <table className="tbl">
+                    <thead><tr>
+                      <th>IP</th><th>HOSTNAME / USN</th><th>OS</th><th>SERVER</th><th>MAC</th><th>SRC</th><th>SEEN</th>
+                    </tr></thead>
+                    <tbody>
+                      {androidDevices.map((d,i)=>{
+                        const macRand = d.mac && parseInt(d.mac.split(":")[0]||"0",16) & 0x02;
+                        const osColor = d.os_hint?.toLowerCase().includes("android") ? "#30d158"
+                                      : d.os_hint?.toLowerCase().includes("ios")     ? "#7c5cbf"
+                                      : "#4a6a7a";
+                        return (
+                          <tr key={i}>
+                            <td style={{ fontFamily:"'JetBrains Mono',monospace",color:"#ff6b35",fontSize:10 }}>{d.ip||"—"}</td>
+                            <td style={{ fontFamily:"'JetBrains Mono',monospace",color:"#c8dde8",fontSize:10,maxWidth:160,overflow:"hidden",textOverflow:"ellipsis" }}>
+                              {d.hostname || d.usn?.slice(0,32) || "—"}
+                            </td>
+                            <td>
+                              <span className="chip" style={{
+                                background:`${osColor}18`,color:osColor,
+                                border:`1px solid ${osColor}44` }}>
+                                {d.os_hint||"Unknown"}
+                              </span>
+                            </td>
+                            <td style={{ fontSize:9,color:"#4a6a7a",fontFamily:"'JetBrains Mono',monospace",maxWidth:140,overflow:"hidden",textOverflow:"ellipsis" }}>
+                              {d.server||"—"}
+                            </td>
+                            <td style={{ fontFamily:"'JetBrains Mono',monospace",fontSize:9 }}>
+                              {d.mac ? (
+                                <span style={{ color:macRand?"#ffd60a":"#8aaabb" }}>
+                                  {d.mac} {macRand?"⚠":""}
+                                </span>
+                              ) : <span style={{ color:"#2a4a5a" }}>randomised</span>}
+                            </td>
+                            <td>
+                              <span className="chip" style={{
+                                background:d.source==="mdns"?"rgba(0,194,255,.08)":"rgba(124,92,191,.1)",
+                                color:d.source==="mdns"?"#00c2ff":"#7c5cbf",
+                                border:`1px solid ${d.source==="mdns"?"rgba(0,194,255,.2)":"rgba(124,92,191,.3)"}` }}>
+                                {(d.source||"?").toUpperCase()}
+                              </span>
+                            </td>
+                            <td style={{ fontSize:9,color:"#3a5a6a",fontFamily:"'JetBrains Mono',monospace" }}>
+                              {d.last_seen ? new Date(d.last_seen).toLocaleTimeString() : "—"}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              {/* MAC Randomisation alerts */}
+              <div className="panel">
+                <div className="panel-title">MAC Randomisation Alerts — rule_mac_randomised</div>
+                <div style={{ fontSize:10,color:"#4a6a7a",marginBottom:10,lineHeight:1.5 }}>
+                  Fired when a device with a locally-administered MAC (bit 1 of first octet set) appears.
+                  Android 10+ assigns a unique random MAC per network. The OUI vendor table will not
+                  identify these devices — use hostname (mDNS) or USN (SSDP) as stable identifiers.
+                </div>
+                {macRandAlerts.length === 0 ? (
+                  <div style={{ color:"#30d158",fontSize:10,fontFamily:"'JetBrains Mono',monospace",
+                    padding:"10px",textAlign:"center",background:"rgba(48,209,88,.04)",
+                    border:"1px solid rgba(48,209,88,.1)",borderRadius:4 }}>
+                    ✓ No randomised MACs detected yet
+                  </div>
+                ) : (
+                  <table className="tbl">
+                    <thead><tr><th>TIME</th><th>IP</th><th>MAC</th><th>DETAIL</th><th>CONF</th></tr></thead>
+                    <tbody>
+                      {macRandAlerts.slice(0,30).map((a,i)=>(
+                        <tr key={i}>
+                          <td style={{ fontFamily:"'JetBrains Mono',monospace",fontSize:9,color:"#3a5a6a" }}>
+                            {new Date(a.timestamp).toLocaleTimeString()}
+                          </td>
+                          <td style={{ fontFamily:"'JetBrains Mono',monospace",color:"#ff6b35",fontSize:10 }}>{a.src_ip||"—"}</td>
+                          <td style={{ fontFamily:"'JetBrains Mono',monospace",color:"#ffd60a",fontSize:9 }}>{a.mac||"—"}</td>
+                          <td style={{ fontSize:9,color:"#8aaabb",maxWidth:200,overflow:"hidden",textOverflow:"ellipsis" }}>{a.detail}</td>
+                          <td style={{ fontFamily:"'JetBrains Mono',monospace",color:"#00c2ff",fontSize:10 }}>{a.confidence||90}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              {/* Reference card */}
+              <div className="panel">
+                <div className="panel-title">Why These Methods Work on Android</div>
+                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
+                  {[
+                    ["mDNS :5353",        "Android broadcasts real hostname regardless of MAC randomisation. Galaxy-S24.local, Pixel-8.local visible in plain text."],
+                    ["SSDP :1900",        "UPnP NOTIFY packets contain Android version in SERVER header and stable UUID in USN field."],
+                    ["MAC randomisation", "Android 10+ default. Second hex digit of MAC is 2/6/A/E. Detected by rule_mac_randomised in signature.py."],
+                    ["DoT :853",          "Android Private DNS (port 853 TCP). Detected by rule_dot_leak — invisible to plain UDP-53 DNS monitoring."],
+                    ["ARP MITM",          "Still works — Android is just another IP on the LAN. All metadata visible even on WPA2/WPA3."],
+                    ["No agent needed",   "mDNS + SSDP are multicast — no touch on device. ARP MITM needs root on Laptop A only."],
+                  ].map(([k,v])=>(
+                    <div key={k} style={{ padding:"8px 10px",background:"#070e17",borderRadius:5,borderLeft:"2px solid #1a3a4a" }}>
+                      <div style={{ fontSize:9,color:"#2a4a5a",marginBottom:3,letterSpacing:"1px",fontFamily:"'JetBrains Mono',monospace" }}>{k.toUpperCase()}</div>
+                      <div style={{ fontSize:10,color:"#8aaabb",lineHeight:1.5 }}>{v}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+            </>)}
+
+          </div>
+        )}
         {nav==="reports" && (
           <div className="slide-in">
             <div style={{ marginBottom:12,display:"flex",gap:8 }}>
               <button className="btn btn-cyan" onClick={generateReport}>Generate HTML Report</button>
-              <button className="btn btn-amber" onClick={()=>api("POST","/api/pipeline/start?mode=simulation")}>Start Pipeline</button>
+              <button className="btn btn-amber" onClick={()=>api("POST","/api/pipeline/start")}>Start Pipeline</button>
             </div>
             <div className="panel">
               <div className="panel-title">Report Contents</div>
@@ -1077,7 +1559,11 @@ export default function App() {
         <div className="panel" style={{ marginBottom:10 }}>
           <div className="panel-title">System Health</div>
           {[
-            ["Signature Detect", "ready", "#30d158"],
+            ["Monitor Capture",  monitorStatus.running?"active":"idle",    monitorStatus.running?"#30d158":"#4a6a7a"],
+            ["ARP MITM",         mitmSessions.length>0?"active":"idle",    mitmSessions.length>0?"#ffd60a":"#4a6a7a"],
+            ["DNS Leak Detect",  "ready",                                   "#30d158"],
+            ["mDNS Listener",    androidStatus.mdns_listener?"active":"idle", androidStatus.mdns_listener?"#30d158":"#4a6a7a"],
+            ["SSDP Listener",    androidStatus.ssdp_listener?"active":"idle", androidStatus.ssdp_listener?"#30d158":"#4a6a7a"],
             ["ML Anomaly",       "heuristic", "heuristic"==="ml"?"#30d158":"#ffd60a"],
             ["Correlation",      "ready", "#30d158"],
             ["UEBA",             uebaStats.learning?"learning":"active", uebaStats.learning?"#ffd60a":"#30d158"],
@@ -1102,6 +1588,10 @@ export default function App() {
           {[
             ["Alerts/min",   (alerts.filter(a=>Date.now()-new Date(a.timestamp).getTime()<60000).length)||"—"],
             ["Open Cases",   cases.filter(c=>c.status==="OPEN").length],
+            ["DNS Leaks",    dnsLeaks.length],
+            ["MITM Sessions",mitmSessions.length],
+            ["Android/Mobile",androidStatus.unique_android||0],
+            ["MAC Randomised",androidStatus.mac_rand_alerts||0],
             ["UEBA Entities",uebaStats.entities_tracked||12],
             ["IOC DB Size",  iocStats.total_iocs||0],
             ["Sigma Rules",  sigmaRules.length],

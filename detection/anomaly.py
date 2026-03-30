@@ -13,6 +13,19 @@ from datetime import datetime
 
 logger = logging.getLogger("cyberremedy.detection.anomaly")
 
+# ── sklearn availability — checked once at import ─────────────────────────────
+_SKLEARN_OK = False
+try:
+    from sklearn.ensemble import IsolationForest as _IsolationForest
+    from sklearn.ensemble import RandomForestClassifier as _RFC
+    import joblib as _joblib
+    _SKLEARN_OK = True
+except ImportError as _sklearn_exc:
+    logger.warning(
+        f"scikit-learn/joblib not installed — anomaly ML disabled. "
+        f"Run: pip install scikit-learn joblib --break-system-packages  ({_sklearn_exc})"
+    )
+
 # Feature columns used for ML (numeric only)
 FEATURE_COLS = [
     "packet_count", "total_bytes", "bytes_per_second", "packets_per_second",
@@ -226,11 +239,12 @@ class AnomalyDetector:
     2. RandomForest Classifier — classifies known attack types
     """
 
-    def __init__(self, model_path: str = "models/anomaly_model.pkl",
-                 classifier_path: str = "models/classifier_model.pkl",
+    def __init__(self, model_path: str = "models/anomaly_model.joblib",
+                 classifier_path: str = "models/rf_attack_model.joblib",
                  contamination: float = 0.05):
         self.model_path = model_path
         self.classifier_path = classifier_path
+        self._label_encoder = None
         self.contamination = contamination
         self.iso_forest = None
         self.classifier = None
@@ -241,14 +255,23 @@ class AnomalyDetector:
         self._load_models()
 
     def _load_models(self):
+        if not _SKLEARN_OK:
+            logger.warning("sklearn unavailable — running in heuristic-only mode")
+            return
         try:
-            import joblib
             if os.path.exists(self.model_path):
-                self.iso_forest = joblib.load(self.model_path)
-                logger.info("Isolation Forest model loaded")
+                self.iso_forest = _joblib.load(self.model_path)
+                logger.info(f"Isolation Forest loaded: {self.model_path}")
             if os.path.exists(self.classifier_path):
-                self.classifier = joblib.load(self.classifier_path)
-                logger.info("RandomForest classifier loaded")
+                self.classifier = _joblib.load(self.classifier_path)
+                logger.info(f"RandomForest classifier loaded: {self.classifier_path}")
+            # Load label encoder if present alongside RF model
+            enc_path = os.path.join(
+                os.path.dirname(self.classifier_path), "label_encoder.joblib"
+            )
+            if os.path.exists(enc_path):
+                self._label_encoder = _joblib.load(enc_path)
+                logger.info(f"Label encoder loaded: {enc_path}")
             self.model_trained = self.iso_forest is not None
         except Exception as e:
             logger.warning(f"Model load failed: {e} — using heuristic mode")
@@ -279,7 +302,7 @@ class AnomalyDetector:
 
             os.makedirs(os.path.dirname(self.model_path), exist_ok=True)
             joblib.dump(self.iso_forest, self.model_path)
-            logger.info(f"Isolation Forest saved: {self.model_path}")
+            logger.info(f"IsolationForest saved: {self.model_path}")
 
             if labels and len(labels) == len(flows):
                 logger.info("Training RandomForest classifier...")
@@ -290,7 +313,7 @@ class AnomalyDetector:
                 )
                 self.classifier.fit(X, labels)
                 joblib.dump(self.classifier, self.classifier_path)
-                logger.info(f"RandomForest classifier saved: {self.classifier_path}")
+                logger.info(f"RandomForest saved: {self.classifier_path}")
 
             self.model_trained = True
             self._flow_buffer = []    # clear buffer after training
@@ -346,7 +369,15 @@ class AnomalyDetector:
 
         if self.classifier is not None:
             try:
-                pred_class = self.classifier.predict([vec])[0]
+                raw_pred   = self.classifier.predict([vec])[0]
+                # Decode integer label if encoder is available
+                if self._label_encoder is not None and not isinstance(raw_pred, str):
+                    try:
+                        pred_class = self._label_encoder.inverse_transform([int(raw_pred)])[0]
+                    except Exception:
+                        pred_class = str(raw_pred)
+                else:
+                    pred_class = str(raw_pred)
                 proba      = self.classifier.predict_proba([vec])[0]
                 top_conf   = float(max(proba))
                 if top_conf > 0.45:        # only trust confident predictions
@@ -404,10 +435,13 @@ class AnomalyDetector:
     @property
     def status(self) -> dict:
         return {
-            "model_trained": self.model_trained,
+            "model_trained":    self.model_trained,
             "iso_forest_ready": self.iso_forest is not None,
             "classifier_ready": self.classifier is not None,
-            "mode": "ml" if self.model_trained else "heuristic",
+            "mode":             "ml" if self.model_trained else "heuristic",
+            "model_path":       self.model_path,
+            "classifier_path":  self.classifier_path,
+            "anomalies_detected": self._anomaly_count,
         }
 
 

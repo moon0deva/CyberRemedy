@@ -5,20 +5,52 @@ Classifies every flow by: protocol, application, threat level, anomaly score.
 Uses IsolationForest (unsupervised) + rule-based L7 classification.
 No simulation — real packets only.
 """
-import time, logging, threading, collections, math, hashlib
+import os, time, logging, threading, collections, math, hashlib
 from datetime import datetime
+from pathlib import Path
 from typing import Optional, Dict, List
 
 import numpy as np
 
 logger = logging.getLogger("cyberremedy.packet_analyzer")
 
+# ── sklearn availability — checked once at import ─────────────────────────────
+_SKLEARN_OK = False
+try:
+    from sklearn.ensemble import IsolationForest as _IsolationForest
+    _SKLEARN_OK = True
+except ImportError:
+    logger.warning(
+        "scikit-learn not installed — ML packet analysis disabled. "
+        "Run: pip install scikit-learn --break-system-packages"
+    )
+
+# ── ML model paths ────────────────────────────────────────────────────────────
+_PA_MODEL_PATH = Path("models/pa_isolation_forest.joblib")
+
 # ── ML model (lazy init) ──────────────────────────────────────────────────────
 _iso_forest = None
 _iso_trained = False
 _iso_lock    = threading.Lock()
 _training_buf: List[list] = []
-_TRAIN_MIN = 200   # minimum flows before training
+_TRAIN_MIN = 50    # minimum flows before first training (lowered from 200)
+
+def _try_load_saved_model():
+    """Load a previously trained model from disk so training survives restarts."""
+    global _iso_forest, _iso_trained
+    if not _SKLEARN_OK:
+        return
+    try:
+        import joblib
+        if _PA_MODEL_PATH.exists():
+            _iso_forest  = joblib.load(_PA_MODEL_PATH)
+            _iso_trained = True
+            logger.info(f"PacketAnalyzer: ML model loaded from {_PA_MODEL_PATH}")
+    except Exception as e:
+        logger.debug(f"PacketAnalyzer: could not load saved model: {e}")
+
+# Try loading on module import
+_try_load_saved_model()
 
 def _get_features(flow: dict) -> list:
     """Extract numeric feature vector from a flow for ML."""
@@ -47,20 +79,28 @@ def _get_features(flow: dict) -> list:
 
 def _train_if_ready():
     global _iso_forest, _iso_trained
+    if not _SKLEARN_OK:
+        return  # sklearn unavailable — already warned once at startup
     with _iso_lock:
         if _iso_trained or len(_training_buf) < _TRAIN_MIN:
             return
         try:
-            from sklearn.ensemble import IsolationForest
+            import joblib
             X = np.array(_training_buf, dtype=float)
-            # Replace NaN/inf with 0
             X = np.nan_to_num(X, nan=0, posinf=0, neginf=0)
-            model = IsolationForest(n_estimators=100, contamination=0.05,
-                                    random_state=42, n_jobs=-1)
+            model = _IsolationForest(n_estimators=100, contamination=0.05,
+                                     random_state=42, n_jobs=-1)
             model.fit(X)
-            _iso_forest = model
+            _iso_forest  = model
             _iso_trained = True
             logger.info(f"PacketAnalyzer: IsolationForest trained on {len(X)} flows")
+            # Persist so model survives restarts
+            try:
+                _PA_MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
+                joblib.dump(model, _PA_MODEL_PATH)
+                logger.info(f"PacketAnalyzer: ML model saved to {_PA_MODEL_PATH}")
+            except Exception as save_err:
+                logger.debug(f"PacketAnalyzer: model save failed: {save_err}")
         except Exception as e:
             logger.warning(f"PacketAnalyzer: ML train failed: {e}")
 
@@ -185,6 +225,9 @@ class Flow:
         self.protocol    = pkt.get('protocol','OTHER')
         self.service     = pkt.get('service','OTHER')
         self.l7          = pkt.get('l7','OTHER')
+        # Use the direction from the sniffer's _tag_direction() which knows
+        # _LOCAL_IPS. Don't override it — it is already correctly set for
+        # both outgoing (src=local) and incoming (dst=local) packets.
         self.direction   = pkt.get('direction','unknown')
         self.src_private = pkt.get('src_private', False)
         self.dst_private = pkt.get('dst_private', False)
@@ -224,10 +267,15 @@ class Flow:
         self.pkt_sizes.append(pkt.get('length', 0))
         self.unique_dports.add(pkt.get('dst_port', 0))
         self._update_flags(pkt)
+        # If direction was unknown on first packet, update it now
+        if self.direction == 'unknown' and pkt.get('direction','unknown') != 'unknown':
+            self.direction = pkt.get('direction')
 
     def to_dict(self) -> dict:
         dur = max(0.001, self.last_ts - self.start_ts)
         avg = self.byte_count / self.pkt_count if self.pkt_count else 0
+        start_iso = datetime.utcfromtimestamp(self.start_ts).isoformat()
+        last_iso  = datetime.utcfromtimestamp(self.last_ts).isoformat()
         return {
             'flow_id':      self.flow_id,
             'src_ip':       self.src_ip,
@@ -257,8 +305,12 @@ class Flow:
             'threat':       self.threat,
             'mitre':        self.mitre,
             'severity':     self.severity,
-            'start_time':   datetime.fromtimestamp(self.start_ts).isoformat(),
-            'last_time':    datetime.fromtimestamp(self.last_ts).isoformat(),
+            'start_time':   start_iso,
+            'last_time':    last_iso,
+            'first_seen':   start_iso,
+            'last_seen':    last_iso,
+            'timestamp':    start_iso,
+            'captured_at':  start_iso,
         }
 
 
@@ -377,17 +429,35 @@ class PacketAnalyzer:
                     self._expire_flow(k)
 
     def get_flows(self, limit=200, severity_filter=None, protocol_filter=None,
-                  direction_filter=None, threat_only=False) -> List[dict]:
-        """Get recent analyzed flows with optional filters."""
+                  direction_filter=None, threat_only=False,
+                  include_active=True) -> List[dict]:
+        """Get recent analyzed flows with optional filters.
+
+        include_active=True merges active flows so the web-traffic panel
+        always shows data even before a flow completes (e.g. long-lived
+        HTTPS sessions that never emit a FIN).
+        """
         with self._lock:
-            flows = list(self._completed)
-        flows.reverse()   # newest first
+            completed = list(self._completed)
+            if include_active:
+                active_dicts = [f.to_dict() for f in
+                                sorted(self._flows.values(),
+                                       key=lambda f: f.last_ts, reverse=True)]
+            else:
+                active_dicts = []
+
+        # Merge: active first (most recent), then completed
+        flows = active_dicts + list(reversed(completed))
+
         if threat_only:
             flows = [f for f in flows if f.get('threat')]
         if severity_filter:
             flows = [f for f in flows if f.get('severity') == severity_filter]
         if protocol_filter:
-            flows = [f for f in flows if f.get('protocol') == protocol_filter or f.get('l7') == protocol_filter]
+            flows = [f for f in flows if
+                     f.get('protocol') == protocol_filter or
+                     f.get('l7') == protocol_filter or
+                     f.get('service') == protocol_filter]
         if direction_filter:
             flows = [f for f in flows if f.get('direction') == direction_filter]
         return flows[:limit]

@@ -14,6 +14,44 @@ from typing import List, Dict, Callable, Optional
 logger = logging.getLogger("cyberremedy.honeypot")
 
 
+
+import subprocess as _subprocess
+
+def _get_lan_bind_ip() -> str:
+    """
+    Get the primary LAN IP to bind honeypots to.
+    Excludes VPN/Tailscale (100.x.x.x), Docker (172.x), loopback.
+    Binds to 0.0.0.0 as fallback (all interfaces) if detection fails.
+    """
+    import socket as _socket
+    import re as _re
+    try:
+        # Prefer the interface on the default route (home router path)
+        out = _subprocess.check_output(
+            ["ip", "route", "get", "8.8.8.8"], text=True, timeout=3
+        )
+        src_m = _re.search(r"src\s+(\S+)", out)
+        if src_m:
+            ip = src_m.group(1)
+            # Reject VPN ranges: 100.x (Tailscale/CGNAT), 10.x VPN, 172.16-31
+            if ip.startswith("100.") or ip.startswith("10.") or ip.startswith("172."):
+                pass  # fall through to next method
+            else:
+                return ip
+    except Exception:
+        pass
+    try:
+        # Find the first 192.168.x.x IP (typical home LAN)
+        out = _subprocess.check_output(["ip", "addr"], text=True, timeout=3)
+        for m in _re.finditer(r"inet\s+(\d+\.\d+\.\d+\.\d+)/", out):
+            ip = m.group(1)
+            if ip.startswith("192.168.") or ip.startswith("10."):
+                if not ip.startswith("10.8.") and not ip.startswith("10.0."):
+                    return ip
+    except Exception:
+        pass
+    return "0.0.0.0"  # fallback: bind all
+
 class HoneypotService:
     """Base class for all honeypot services."""
 
@@ -78,7 +116,9 @@ class HoneypotService:
         try:
             self._server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self._server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            self._server_sock.bind(("0.0.0.0", self.port))
+            bind_ip = _get_lan_bind_ip()
+            self._server_sock.bind((bind_ip, self.port))
+            logger.debug(f"Honeypot {self.service_name} binding to {bind_ip}:{self.port}")
             self._server_sock.listen(5)
             self._server_sock.settimeout(1.0)
             self._running = True

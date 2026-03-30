@@ -1,5 +1,5 @@
 """
-CyberRemedy v1.0 — Packet Capture
+CyberRemedy v1.2 — Packet Capture
 Live only. No simulation. Uses scapy (root) or AF_PACKET socket (root)
 or tcpdump subprocess. Refuses to fall back to fake data.
 """
@@ -37,7 +37,11 @@ else:
 
 # ── Packet normaliser (scapy packet → plain dict) ─────────────────────────────
 
-import netifaces as _nif
+try:
+    import netifaces as _nif
+except ImportError:
+    _nif = None
+
 def _get_local_ips() -> set:
     """Return all IPs assigned to this machine across all interfaces."""
     ips = set()
@@ -66,9 +70,14 @@ _LOCAL_IPS: set = _get_local_ips()
 _PKT_COUNT = 0
 
 def _tag_direction(pkt: dict) -> dict:
-    """Tag packet direction: incoming/outgoing/internal/transit.
+    """Tag packet direction: outgoing/incoming/internal/monitored.
     Also enriches with port-based service name and marks private IPs.
-    Captures ALL traffic including incoming website responses.
+
+    Directions:
+      outgoing  — Laptop A sent this packet (src = local IP)
+      incoming  — Laptop A received this packet (dst = local IP)
+      internal  — both src and dst are local IPs (loopback/LAN-to-LAN)
+      monitored — third-party traffic seen via promiscuous/monitor mode
     """
     global _LOCAL_IPS, _PKT_COUNT
     _PKT_COUNT += 1
@@ -78,21 +87,25 @@ def _tag_direction(pkt: dict) -> dict:
 
     src = pkt.get('src_ip', '')
     dst = pkt.get('dst_ip', '')
-    src_local = src in _LOCAL_IPS or src.startswith('192.168.') or src.startswith('10.') or src.startswith('172.')
-    dst_local = dst in _LOCAL_IPS or dst.startswith('192.168.') or dst.startswith('10.') or dst.startswith('172.')
+    src_is_mine = src in _LOCAL_IPS
+    dst_is_mine = dst in _LOCAL_IPS
 
-    if src in _LOCAL_IPS and dst not in _LOCAL_IPS:
-        pkt['direction'] = 'outgoing'
-    elif dst in _LOCAL_IPS and src not in _LOCAL_IPS:
-        pkt['direction'] = 'incoming'    # ← website responses, remote connections TO us
-    elif src in _LOCAL_IPS and dst in _LOCAL_IPS:
-        pkt['direction'] = 'internal'
+    if src_is_mine and not dst_is_mine:
+        pkt['direction'] = 'outgoing'      # Laptop A → internet/LAN
+    elif dst_is_mine and not src_is_mine:
+        pkt['direction'] = 'incoming'      # internet/LAN → Laptop A (website responses etc)
+    elif src_is_mine and dst_is_mine:
+        pkt['direction'] = 'internal'      # local loopback / same-machine
     else:
-        pkt['direction'] = 'transit'     # ← forwarded/bridged traffic
+        # Neither src nor dst is this machine — third-party traffic seen via
+        # promiscuous/monitor mode (e.g. VM traffic, other LAN hosts).
+        pkt['direction'] = 'monitored'
 
-    # Private IP flags
-    pkt['src_private'] = src_local
-    pkt['dst_private'] = dst_local
+    # Private IP flags (useful for geo / alert enrichment)
+    def _is_private(ip):
+        return ip.startswith(('192.168.', '10.', '172.', '127.', 'fc', 'fd'))
+    pkt['src_private'] = _is_private(src) if src else False
+    pkt['dst_private'] = _is_private(dst) if dst else False
 
     # Service name from well-known ports
     dport = pkt.get('dst_port', 0)
@@ -148,30 +161,130 @@ def _is_outgoing(pkt: dict) -> bool:
     if not src: return False
     return src in _LOCAL_IPS
 
+def _is_local_traffic(pkt: dict) -> bool:
+    """
+    Return True if this packet involves Laptop A as either sender OR receiver.
+    This is the correct filter for monitoring Laptop A's own web traffic:
+      - outgoing: Laptop A → website  (src_ip in _LOCAL_IPS)
+      - incoming: website → Laptop A  (dst_ip in _LOCAL_IPS)
+    Previously only outgoing was captured, causing website responses,
+    downloads, and all inbound connections to be silently dropped.
+    """
+    global _LOCAL_IPS
+    src = pkt.get('src_ip', '')
+    dst = pkt.get('dst_ip', '')
+    return bool(src and src in _LOCAL_IPS) or bool(dst and dst in _LOCAL_IPS)
+
 
 def normalize_packet(pkt) -> Optional[dict]:
     try:
         from scapy.layers.inet import IP, TCP, UDP, ICMP
-        from scapy.layers.dns  import DNS
+        from scapy.layers.dns  import DNS, DNSQR, DNSRR
         if IP not in pkt: return None
         ip = pkt[IP]
         proto, sport, dport, flags = "OTHER", 0, 0, ""
+
+        # ── Extract raw payload bytes for entropy analysis ─────────────────
+        try:
+            _raw_payload = bytes(pkt[IP].payload)
+        except Exception:
+            _raw_payload = b""
+
         if TCP in pkt:
-            proto, sport, dport, flags = "TCP", pkt[TCP].sport, pkt[TCP].dport, str(pkt[TCP].flags)
+            proto  = "TCP"
+            sport  = pkt[TCP].sport
+            dport  = pkt[TCP].dport
+            flags  = str(pkt[TCP].flags)
         elif UDP in pkt:
-            proto = "DNS" if DNS in pkt else "UDP"
-            sport, dport = pkt[UDP].sport, pkt[UDP].dport
+            sport = pkt[UDP].sport
+            dport = pkt[UDP].dport
+            if DNS in pkt:
+                proto = "DNS"
+            else:
+                proto = "UDP"
         elif ICMP in pkt:
             proto = "ICMP"
+
+        # Extract Ethernet layer MACs if available (needed for MITM MAC-matching)
+        from scapy.layers.l2 import Ether
+        _src_mac = pkt[Ether].src.lower() if Ether in pkt else ""
+        _dst_mac = pkt[Ether].dst.lower() if Ether in pkt else ""
+
         raw = {
-            "timestamp":   datetime.utcnow().isoformat(),
-            "src_ip":      ip.src,  "dst_ip":  ip.dst,
-            "src_port":    sport,   "dst_port": dport,
-            "protocol":    proto,   "length":   len(pkt),
-            "payload_len": len(bytes(pkt.payload)),
-            "ttl":         ip.ttl,  "flags":    flags,
-            "raw_ts":      time.time(),
+            "timestamp":    datetime.utcnow().isoformat(),
+            "captured_at":  datetime.utcnow().isoformat(),
+            "src_ip":       ip.src,
+            "dst_ip":       ip.dst,
+            "src_mac":      _src_mac,
+            "dst_mac":      _dst_mac,
+            "src_port":     sport,
+            "dst_port":     dport,
+            "protocol":     proto,
+            "length":       len(pkt),
+            "payload_len":  len(_raw_payload),
+            "_raw_payload": _raw_payload,          # bytes → byte-entropy in FlowRecord
+            "ttl":          ip.ttl,
+            "flags":        flags,
+            "raw_ts":       time.time(),
         }
+
+        # ── Full DNS field extraction ──────────────────────────────────────
+        if proto == "DNS" and DNS in pkt:
+            dns = pkt[DNS]
+            raw["dns_id"]       = int(dns.id)
+            raw["dns_qr"]       = int(dns.qr)          # 0=query, 1=response
+            raw["dns_opcode"]   = int(dns.opcode)
+            raw["dns_rcode"]    = int(dns.rcode)
+            raw["dns_qdcount"]  = int(dns.qdcount)     # question count
+            raw["dns_ancount"]  = int(dns.ancount)     # answer count
+
+            # Extract question section
+            queries = []
+            try:
+                q = dns.qd                             # first question record
+                while q is not None and hasattr(q, "qname"):
+                    name = q.qname.decode("utf-8", errors="replace").rstrip(".")
+                    queries.append({
+                        "name":  name,
+                        "qtype": int(q.qtype),         # 1=A, 28=AAAA, 15=MX, 16=TXT…
+                    })
+                    q = q.payload if hasattr(q.payload, "qname") else None
+            except Exception:
+                pass
+            raw["dns_queries"] = queries
+            raw["dns_query"]   = queries[0]["name"] if queries else ""
+
+            # Extract answer section (resolved IPs / CNAME chains)
+            answers = []
+            try:
+                a = dns.an
+                while a is not None and hasattr(a, "rrname"):
+                    ans = {
+                        "name":  a.rrname.decode("utf-8", errors="replace").rstrip("."),
+                        "type":  int(a.type),
+                        "ttl":   int(a.ttl),
+                    }
+                    if a.type == 1:                    # A record
+                        try: ans["rdata"] = str(a.rdata)
+                        except Exception: pass
+                    elif a.type == 28:                 # AAAA record
+                        try: ans["rdata"] = str(a.rdata)
+                        except Exception: pass
+                    elif a.type == 5:                  # CNAME
+                        try: ans["rdata"] = a.rdata.decode("utf-8", errors="replace").rstrip(".")
+                        except Exception: pass
+                    elif a.type == 16:                 # TXT
+                        try: ans["rdata"] = str(a.rdata)
+                        except Exception: pass
+                    answers.append(ans)
+                    a = a.payload if hasattr(a.payload, "rrname") else None
+            except Exception:
+                pass
+            raw["dns_answers"]  = answers
+            raw["dns_resolved"] = [
+                a["rdata"] for a in answers if "rdata" in a and a["type"] in (1, 28)
+            ]
+
         return _tag_direction(raw)
     except Exception:
         return None
@@ -210,7 +323,7 @@ def _parse_raw_ip(data: bytes) -> Optional[dict]:
         elif proto_num == 1:
             proto = "ICMP"
         ttl = data[8]
-        return {
+        raw = {
             "timestamp":   datetime.utcnow().isoformat(),
             "src_ip":      src_ip,  "dst_ip":  dst_ip,
             "src_port":    sport,   "dst_port": dport,
@@ -219,37 +332,100 @@ def _parse_raw_ip(data: bytes) -> Optional[dict]:
             "ttl":         ttl,     "flags":    flags,
             "raw_ts":      time.time(),
         }
-        return _tag_direction(raw)
+        return _tag_direction(raw)   # ← was unreachable before; now correctly called
     except Exception:
         return None
 
 # ── Interface resolver ────────────────────────────────────────────────────────
 
 def _resolve_interface(hint: str = "auto") -> str:
+    """
+    Detect the active network interface.
+    Works for: home WiFi, phone hotspot (USB/WiFi), wired ethernet.
+    Excludes: loopback, Tailscale (100.x), Docker bridges (172.x), VPN tun/tap.
+    """
     if hint not in ("auto", "", None):
         return hint
-    # Method 1: ip route
+
+    # Method 1: ip route get 8.8.8.8 — finds the interface on the default path
     try:
-        out = subprocess.check_output(["ip", "route", "get", "8.8.8.8"], text=True, timeout=3)
+        out = subprocess.check_output(["ip", "route", "get", "8.8.8.8"],
+                                      text=True, timeout=3)
         m = re.search(r"dev\s+(\S+)", out)
-        if m: return m.group(1)
-    except Exception: pass
-    # Method 2: ip link
+        if m:
+            iface = m.group(1)
+            # Accept wlan*, eth*, enp*, usb* (hotspot tethering), rndis*
+            # Reject tun*, tap*, tailscale*, docker*, virbr*, lo
+            if not any(iface.startswith(x) for x in
+                       ("lo","tun","tap","tailscale","docker","virbr","veth","br-")):
+                return iface
+    except Exception:
+        pass
+
+    # Method 2: Pick first UP non-virtual interface with an inet address
+    # Handles hotspot USB tethering (usb0, rndis0) and WiFi hotspot (wlan0)
+    IFACE_PREF = ["wlan0","wlan1","eth0","enp","ens","usb0","rndis0","bnep0"]
     try:
-        out = subprocess.check_output(["ip", "link"], text=True, timeout=3)
-        for ln in out.split("\n"):
-            m = re.match(r"\d+: (\w+):", ln)
-            if m and m.group(1) not in ("lo",):
-                return m.group(1)
-    except Exception: pass
-    # Method 3: netifaces
+        out = subprocess.check_output(["ip", "addr", "show"], text=True, timeout=3)
+        blocks = re.split(r"\n(?=\d+:)", out)
+        candidates = []
+        for block in blocks:
+            name_m = re.match(r"\d+:\s+(\w+)", block)
+            if not name_m: continue
+            name = name_m.group(1)
+            if any(name.startswith(x) for x in
+                   ("lo","tun","tap","tailscale","docker","virbr","veth","br-")):
+                continue
+            if "UP" not in block and "LOWER_UP" not in block:
+                continue
+            ip_m = re.search(r"inet\s+(\d+\.\d+\.\d+\.\d+)", block)
+            if not ip_m: continue
+            ip = ip_m.group(1)
+            # Skip Tailscale CGNAT range (100.64-127.x.x)
+            if ip.startswith("100."): continue
+            # Score by interface name preference
+            score = next((i for i, p in enumerate(IFACE_PREF) if name.startswith(p)), 99)
+            candidates.append((score, name, ip))
+        if candidates:
+            candidates.sort()
+            return candidates[0][1]
+    except Exception:
+        pass
+
+    # Method 3: netifaces fallback
     try:
         import netifaces
         for i in netifaces.interfaces():
-            if i.startswith("lo"): continue
-            if 2 in netifaces.ifaddresses(i): return i
-    except ImportError: pass
+            if i.startswith("lo") or i.startswith("tailscale"): continue
+            addrs = netifaces.ifaddresses(i)
+            if netifaces.AF_INET in addrs:
+                ip = addrs[netifaces.AF_INET][0].get("addr","")
+                if ip and not ip.startswith("100."): return i
+    except ImportError:
+        pass
+
     return "eth0"
+
+
+def _detect_gateway(iface: str = None) -> str:
+    """
+    Detect the gateway IP for the given interface.
+    Works on home WiFi, phone hotspot, and USB tethering.
+    Returns the gateway IP or empty string if not found.
+    """
+    try:
+        cmd = ["ip", "route", "show"]
+        if iface:
+            cmd += ["dev", iface]
+        out = subprocess.check_output(cmd, text=True, timeout=3)
+        for line in out.splitlines():
+            if "default" in line:
+                m = re.search(r"via\s+(\S+)", line)
+                if m:
+                    return m.group(1)
+    except Exception:
+        pass
+    return ""
 
 # ── Main LiveSniffer class ────────────────────────────────────────────────────
 
@@ -266,17 +442,19 @@ class LiveSniffer:
     def __init__(self, interface="auto", callback: Callable = None,
                  pcap_enabled=False, pcap_dir="data/pcap",
                  pcap_max_mb=500, pcap_max_gb=20.0,
-                 sim_rate=None, profile=None):      # sim_rate/profile accepted but ignored
-        self.interface  = interface
-        self.callback   = callback
-        self._running   = False
-        self._mode      = "idle"
-        self._count     = 0
-        self._pcap_dir  = Path(pcap_dir)
-        self._pcap_en   = pcap_enabled and SCAPY_OK
-        self._pcap_max  = int(pcap_max_mb * 1_048_576)
-        self._pcap_cap  = int(pcap_max_gb * 1_073_741_824)
-        self._pw        = None
+                 sim_rate=None, profile=None,
+                 monitor_mode=False):       # NEW: set True when sniffing a remote target
+        self.interface    = interface
+        self.callback     = callback
+        self._running     = False
+        self._mode        = "idle"
+        self._count       = 0
+        self._pcap_dir    = Path(pcap_dir)
+        self._pcap_en     = pcap_enabled and SCAPY_OK
+        self._pcap_max    = int(pcap_max_mb * 1_048_576)
+        self._pcap_cap    = int(pcap_max_gb * 1_073_741_824)
+        self._pw          = None
+        self._monitor_mode = monitor_mode  # when True: capture ALL packets, not just local outgoing
 
     def start(self):
         if self._running: return
@@ -289,7 +467,11 @@ class LiveSniffer:
             return
         self._running = True
         iface = _resolve_interface(self.interface)
-        logger.info(f"Starting live capture on interface: {iface}")
+        gw    = _detect_gateway(iface)
+        logger.info(f"Starting live capture on interface: {iface} (gateway: {gw or 'unknown'})")
+        # Store for other modules to query
+        self._active_iface   = iface
+        self._active_gateway = gw
 
         if SCAPY_OK:
             t = threading.Thread(target=self._live_scapy, args=(iface,), daemon=True, name="cap-scapy")
@@ -323,7 +505,12 @@ class LiveSniffer:
 
             def _handle(pkt):
                 n = normalize_packet(pkt)
-                if n and _is_outgoing(n):
+                # Capture ALL traffic involving this machine:
+                #   - outgoing: Laptop A → internet/LAN
+                #   - incoming: internet/LAN → Laptop A  ← was silently dropped before
+                #   - monitored: third-party traffic seen via promiscuous/monitor mode
+                # _is_local_traffic() returns True for both outgoing AND incoming.
+                if n and (self._monitor_mode or _is_local_traffic(n)):
                     self._count += 1
                     self._write_pcap(pkt)
                     if self.callback:
@@ -350,7 +537,7 @@ class LiveSniffer:
                 try:
                     raw, _ = sock.recvfrom(65535)
                     pkt = _parse_raw_ip(raw)
-                    if pkt and _is_outgoing(pkt):
+                    if pkt and (self._monitor_mode or _is_local_traffic(pkt)):
                         self._count += 1
                         if self.callback:
                             try: self.callback(pkt)
@@ -423,7 +610,7 @@ class LiveSniffer:
                     "flags":       flags,
                     "raw_ts":      time.time(),
                 }
-                if _is_outgoing(pkt):
+                if _is_local_traffic(pkt) or self._monitor_mode:
                     self._count += 1
                     if self.callback:
                         try: self.callback(pkt)

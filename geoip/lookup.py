@@ -1,7 +1,22 @@
-"""CyberRemedy v1.0 — GeoIP. No API keys. Uses offline CSV (downloaded on startup) + ip-api.com fallback."""
-import json, logging as _logging, threading, ipaddress, bisect
+"""CyberRemedy v1.2 — GeoIP. No API keys. Uses offline CSV (downloaded on startup) + ip-api.com fallback.
+
+FIX (bandwidth / timeout): _lookup_online() is now fully non-blocking.
+When the offline CSV misses an IP, lookup() returns a placeholder immediately
+and schedules a background thread to fetch ip-api.com.  The cache is updated
+once the response arrives so subsequent lookups get the real data.
+This eliminates the up-to-4 s stall that was slowing down page loads.
+"""
+import json, logging as _logging, threading, ipaddress, bisect, concurrent.futures
 from pathlib import Path
 from typing import Optional
+
+# Thread pool for background GeoIP resolution (bounded to avoid spawning hundreds of threads)
+_online_executor = concurrent.futures.ThreadPoolExecutor(
+    max_workers=4, thread_name_prefix="geoip-online"
+)
+# Tracks IPs that already have a pending background resolution so we don't fire duplicates
+_pending_ips: set = set()
+_pending_lock = threading.Lock()
 
 logger = _logging.getLogger("cyberremedy.geoip")
 
@@ -9,8 +24,12 @@ _PRIV = [ipaddress.IPv4Network(n) for n in
          ["10.0.0.0/8","172.16.0.0/12","192.168.0.0/16","127.0.0.0/8","169.254.0.0/16","0.0.0.0/8"]]
 
 def _is_private(ip):
+    if not ip: return True
+    # MAC addresses (e.g. "aa:bb:cc:dd:ee:ff") are never routable IPs
+    if ":" in ip and len(ip) <= 17:
+        return True
     try: return any(ipaddress.IPv4Address(ip) in n for n in _PRIV)
-    except Exception: return False
+    except Exception: return True   # unparseable → treat as non-routable, skip lookup
 
 def _flag(code):
     if not code or len(code)!=2: return "🌐"
@@ -108,18 +127,56 @@ class GeoIPLookup:
         return None
 
     def _lookup_online(self, ip):
+        """Blocking HTTP fetch — must only be called from a background thread."""
         try:
             import urllib.request
             url = f"http://ip-api.com/json/{ip}?fields=status,country,countryCode,regionName,city,lat,lon,org,isp"
             with urllib.request.urlopen(url, timeout=4) as r:
                 d = json.loads(r.read().decode())
-            if d.get("status")=="success":
+            if d.get("status") == "success":
                 return {"ip":ip,"country":d.get("country","Unknown"),"country_code":d.get("countryCode","??"),
                         "city":d.get("city",""),"region":d.get("regionName",""),
                         "lat":d.get("lat",0.0),"lon":d.get("lon",0.0),
                         "org":d.get("org",""),"isp":d.get("isp",""),"is_private":False}
-        except Exception as e: logger.debug(f"ip-api.com {ip}: {e}")
+        except Exception as e:
+            logger.debug(f"ip-api.com {ip}: {e}")
         return None
+
+    def _schedule_online_lookup(self, ip: str) -> None:
+        """Fire-and-forget: resolve ip in background and update cache when done.
+        Returns immediately — never blocks the calling thread.
+        """
+        with _pending_lock:
+            if ip in _pending_ips:
+                return          # already in-flight, don't duplicate
+            _pending_ips.add(ip)
+
+        def _work():
+            try:
+                result = self._lookup_online(ip)
+                if result is None:
+                    return      # keep the Unknown placeholder in cache
+                result["flag"]      = _flag(result.get("country_code",""))
+                result["high_risk"] = result.get("country_code","") in self.high_risk
+                with self._lock:
+                    self._cache[ip] = result
+                    if len(self._cache) % 50 == 0:
+                        try:
+                            with open(self._cache_path, "w") as f:
+                                json.dump(self._cache, f)
+                        except Exception:
+                            pass
+                logger.debug(f"GeoIP background resolved {ip} -> {result.get('country_code','??')}")
+            finally:
+                with _pending_lock:
+                    _pending_ips.discard(ip)
+
+        try:
+            _online_executor.submit(_work)
+        except RuntimeError:
+            # executor shut down (very late in process lifecycle) — just drop it
+            with _pending_lock:
+                _pending_ips.discard(ip)
 
     def lookup(self, ip: str) -> dict:
         if not self.enabled:
@@ -128,21 +185,44 @@ class GeoIPLookup:
             return {"ip":ip,"country":"Private Network","country_code":"LAN","city":"Local",
                     "region":"","lat":0.0,"lon":0.0,"org":"Private","isp":"Local",
                     "is_private":True,"flag":"🏠","high_risk":False}
+
+        # Return from cache immediately if available
         with self._lock:
-            if ip in self._cache: return self._cache[ip]
-        result = self._lookup_csv(ip) or self._lookup_online(ip)
-        if result is None:
-            result = {"ip":ip,"country":"Unknown","country_code":"??","city":"","region":"",
-                      "lat":0.0,"lon":0.0,"org":"","isp":"","is_private":False}
-        result["flag"]      = _flag(result.get("country_code",""))
-        result["high_risk"] = result.get("country_code","") in self.high_risk
+            if ip in self._cache:
+                return self._cache[ip]
+
+        # Try the fast offline CSV first (no network, no delay)
+        result = self._lookup_csv(ip)
+
+        if result is not None:
+            # CSV hit — store and return straight away
+            result["flag"]      = _flag(result.get("country_code",""))
+            result["high_risk"] = result.get("country_code","") in self.high_risk
+            with self._lock:
+                self._cache[ip] = result
+                if len(self._cache) % 50 == 0:
+                    try:
+                        with open(self._cache_path, "w") as f:
+                            json.dump(self._cache, f)
+                    except Exception:
+                        pass
+            return result
+
+        # CSV miss — store a lightweight placeholder NOW so we return instantly,
+        # then kick off a background thread to fill in the real data.
+        placeholder = {"ip":ip,"country":"Unknown","country_code":"??","city":"","region":"",
+                       "lat":0.0,"lon":0.0,"org":"","isp":"","is_private":False,
+                       "flag":"🌐","high_risk":False}
         with self._lock:
-            self._cache[ip] = result
-            if len(self._cache)%50==0:
-                try:
-                    with open(self._cache_path,"w") as f: json.dump(self._cache,f)
-                except Exception: pass
-        return result
+            # Double-check: another thread may have filled it while we were in _lookup_csv
+            if ip in self._cache:
+                return self._cache[ip]
+            self._cache[ip] = placeholder
+
+        # Schedule the real lookup in the background — does NOT block the caller
+        self._schedule_online_lookup(ip)
+
+        return placeholder
 
     def get_map_data(self, alerts, limit=200):
         seen = {}

@@ -1,5 +1,5 @@
 """
-CyberRemedy v1.0 — Windows Event Log Agent
+CyberRemedy v1.2 — Windows Event Log Agent
 Run on Windows machines to ship event logs to CyberRemedy server.
 Usage: python windows_agent.py --server 192.168.1.100 --port 5515
 """

@@ -1,0 +1,545 @@
+---
+title: Mimikatz Usage Detection
+id: sigma-001
+status: stable
+description: Detects Mimikatz credential dumping via command-line arguments
+references:
+  - https://attack.mitre.org/techniques/T1003/
+tags:
+  - attack.credential_access
+  - attack.t1003
+author: CyberRemedy
+date: 2024/01/01
+logsource: {category: process_creation, product: windows}
+detection:
+  selection:
+    CommandLine|contains:
+      - 'sekurlsa::'
+      - 'kerberos::'
+      - 'lsadump::'
+      - 'privilege::debug'
+      - 'crypto::certificates'
+  condition: selection
+falsepositives:
+  - Penetration testing
+level: critical
+---
+title: PowerShell Encoded Command Execution
+id: sigma-002
+status: stable
+description: Detects PowerShell with encoded commands (common malware technique)
+tags:
+  - attack.execution
+  - attack.t1059.001
+author: CyberRemedy
+logsource: {category: process_creation, product: windows}
+detection:
+  selection:
+    Image|endswith: '\powershell.exe'
+    CommandLine|contains:
+      - '-EncodedCommand'
+      - '-enc '
+      - '-e '
+  filter:
+    CommandLine|contains: 'SCCM'
+  condition: selection and not filter
+level: high
+---
+title: Suspicious Scheduled Task Creation
+id: sigma-003
+status: stable
+description: Detects scheduled task creation for persistence
+tags:
+  - attack.persistence
+  - attack.t1053.005
+logsource: {category: process_creation, product: windows}
+detection:
+  selection:
+    Image|endswith: '\schtasks.exe'
+    CommandLine|contains:
+      - '/create'
+      - '/sc onlogon'
+      - '/sc onstart'
+      - '/ru system'
+  condition: selection
+level: high
+---
+title: Net User Discovery
+id: sigma-004
+status: stable
+description: Attacker enumerating local and domain users
+tags:
+  - attack.discovery
+  - attack.t1087
+logsource: {category: process_creation, product: windows}
+detection:
+  selection:
+    Image|endswith: '\net.exe'
+    CommandLine|contains:
+      - 'user /domain'
+      - 'localgroup administrators'
+      - 'group "domain admins"'
+      - 'accounts /dom'
+  condition: selection
+level: medium
+---
+title: WMI Execution for Lateral Movement
+id: sigma-005
+status: stable
+description: WMI used for remote command execution
+tags:
+  - attack.lateral_movement
+  - attack.t1047
+logsource: {category: process_creation, product: windows}
+detection:
+  selection:
+    Image|endswith: '\wmic.exe'
+    CommandLine|contains:
+      - '/node:'
+      - 'process call create'
+  condition: selection
+level: high
+---
+title: LSASS Memory Access
+id: sigma-006
+status: stable
+description: Suspicious access to LSASS process memory (credential dumping)
+tags:
+  - attack.credential_access
+  - attack.t1003.001
+logsource: {category: process_access, product: windows}
+detection:
+  selection:
+    TargetImage|endswith: '\lsass.exe'
+    GrantedAccess|contains:
+      - '0x1010'
+      - '0x1410'
+      - '0x147a'
+      - '0x143a'
+  condition: selection
+level: critical
+---
+title: Shadow Copy Deletion
+id: sigma-007
+status: stable
+description: Ransomware/attacker deleting shadow copies to prevent recovery
+tags:
+  - attack.impact
+  - attack.t1490
+logsource: {category: process_creation, product: windows}
+detection:
+  selection_vssadmin:
+    Image|endswith: '\vssadmin.exe'
+    CommandLine|contains: 'delete shadows'
+  selection_wmic:
+    Image|endswith: '\wmic.exe'
+    CommandLine|contains: 'shadowcopy delete'
+  selection_wbadmin:
+    Image|endswith: '\wbadmin.exe'
+    CommandLine|contains: 'delete catalog'
+  condition: 1 of selection_*
+level: critical
+---
+title: Suspicious Registry AutoRun Key
+id: sigma-008
+status: stable
+description: Executable added to registry Run key for persistence
+tags:
+  - attack.persistence
+  - attack.t1547.001
+logsource: {category: registry_set, product: windows}
+detection:
+  selection:
+    TargetObject|contains:
+      - '\SOFTWARE\Microsoft\Windows\CurrentVersion\Run'
+      - '\SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce'
+    Details|endswith:
+      - '.exe'
+      - '.bat'
+      - '.vbs'
+      - '.ps1'
+  condition: selection
+level: high
+---
+title: Certutil Decode — Malware Download/Decode
+id: sigma-009
+status: stable
+description: Certutil used to decode or download malicious content
+tags:
+  - attack.defense_evasion
+  - attack.t1140
+logsource: {category: process_creation, product: windows}
+detection:
+  selection:
+    Image|endswith: '\certutil.exe'
+    CommandLine|contains:
+      - '-decode'
+      - '-decodehex'
+      - 'urlcache'
+      - 'download'
+  condition: selection
+level: high
+---
+title: Regsvr32 Squiblydoo Bypass
+id: sigma-010
+status: stable
+description: regsvr32 used to bypass application whitelisting
+tags:
+  - attack.defense_evasion
+  - attack.t1218.010
+logsource: {category: process_creation, product: windows}
+detection:
+  selection:
+    Image|endswith: '\regsvr32.exe'
+    CommandLine|contains:
+      - '/s'
+      - '/u'
+      - 'scrobj.dll'
+      - '.sct'
+  condition: selection
+level: high
+---
+title: Whoami Execution (Privilege Check)
+id: sigma-011
+status: stable
+description: Attacker checking current user privileges
+tags:
+  - attack.discovery
+  - attack.t1033
+logsource: {category: process_creation, product: windows}
+detection:
+  selection:
+    Image|endswith: '\whoami.exe'
+    CommandLine|contains:
+      - '/priv'
+      - '/groups'
+      - '/all'
+  condition: selection
+level: low
+---
+title: Network Port Scan via Nmap
+id: sigma-012
+status: stable
+description: Nmap port scanning activity detected in logs
+tags:
+  - attack.reconnaissance
+  - attack.t1046
+logsource: {category: network_connection}
+detection:
+  selection:
+    CommandLine|contains:
+      - 'nmap'
+      - '-sS'
+      - '-sV'
+      - '-p-'
+      - '--open'
+  condition: selection
+level: medium
+---
+title: SSH Brute Force
+id: sigma-013
+status: stable
+description: Multiple failed SSH authentication attempts from single source
+tags:
+  - attack.credential_access
+  - attack.t1110
+logsource: {product: linux, service: auth}
+detection:
+  selection:
+    message|contains:
+      - 'Failed password'
+      - 'Invalid user'
+      - 'authentication failure'
+  condition: selection
+level: medium
+---
+title: Sudo Privilege Escalation Attempt
+id: sigma-014
+status: stable
+description: Suspicious sudo usage for privilege escalation
+tags:
+  - attack.privilege_escalation
+  - attack.t1548.003
+logsource: {product: linux, service: auth}
+detection:
+  selection:
+    message|contains:
+      - 'sudo: authentication failure'
+      - '(root) NOPASSWD'
+      - 'sudo -l'
+  condition: selection
+level: high
+---
+title: Linux Reverse Shell via Bash
+id: sigma-015
+status: stable
+description: Bash reverse shell one-liner execution
+tags:
+  - attack.execution
+  - attack.t1059.004
+logsource: {category: process_creation, product: linux}
+detection:
+  selection:
+    CommandLine|contains:
+      - '/dev/tcp/'
+      - 'bash -i'
+      - '0>&1'
+  condition: selection
+level: critical
+---
+title: Crontab Modification
+id: sigma-016
+status: stable
+description: Crontab modified for persistence
+tags:
+  - attack.persistence
+  - attack.t1053.003
+logsource: {category: file_change, product: linux}
+detection:
+  selection:
+    TargetFilename|contains:
+      - '/etc/crontab'
+      - '/var/spool/cron/'
+      - '/etc/cron.d/'
+  condition: selection
+level: medium
+---
+title: Data Compressed for Exfiltration
+id: sigma-017
+status: stable
+description: Large archive creation before potential exfiltration
+tags:
+  - attack.exfiltration
+  - attack.t1560
+logsource: {category: process_creation}
+detection:
+  selection:
+    CommandLine|contains:
+      - '-archive'
+      - 'zip -r'
+      - 'tar -czf'
+      - '7z a'
+      - 'rar a'
+  condition: selection
+level: medium
+---
+title: Unusual Outbound Port 4444 (Default Metasploit)
+id: sigma-018
+status: stable
+description: Connection to default Metasploit port 4444
+tags:
+  - attack.command_and_control
+  - attack.t1071
+logsource: {category: network_connection}
+detection:
+  selection:
+    dst_port: 4444
+    direction: outgoing
+  condition: selection
+level: high
+---
+title: PowerShell Download Cradle
+id: sigma-019
+status: stable
+description: PowerShell downloading and executing remote payload
+tags:
+  - attack.execution
+  - attack.t1059.001
+logsource: {category: process_creation, product: windows}
+detection:
+  selection:
+    Image|endswith: '\powershell.exe'
+    CommandLine|contains:
+      - 'DownloadString'
+      - 'DownloadFile'
+      - 'WebClient'
+      - 'IEX'
+      - 'Invoke-Expression'
+  condition: selection
+level: high
+---
+title: BITS Job for Malware Download
+id: sigma-020
+status: stable
+description: Background Intelligent Transfer Service used for malware download
+tags:
+  - attack.defense_evasion
+  - attack.t1197
+logsource: {category: process_creation, product: windows}
+detection:
+  selection:
+    Image|endswith: '\bitsadmin.exe'
+    CommandLine|contains:
+      - '/transfer'
+      - '/download'
+      - '/addfile'
+  condition: selection
+level: high
+---
+title: Abnormal DNS Query Length
+id: sigma-021
+status: stable
+description: Unusually long DNS query — possible DNS tunneling
+tags:
+  - attack.exfiltration
+  - attack.t1048.003
+logsource: {category: dns}
+detection:
+  selection:
+    dns_query|contains: '.'
+    dns_query|re: '^[a-zA-Z0-9]{40,}\.'
+  condition: selection
+level: high
+---
+title: Disable Windows Firewall
+id: sigma-022
+status: stable
+description: Windows Firewall disabled via netsh or PowerShell
+tags:
+  - attack.defense_evasion
+  - attack.t1562.004
+logsource: {category: process_creation, product: windows}
+detection:
+  selection_netsh:
+    Image|endswith: '\netsh.exe'
+    CommandLine|contains:
+      - 'advfirewall set allprofiles state off'
+      - 'firewall set opmode mode=disable'
+  selection_ps:
+    CommandLine|contains:
+      - 'Set-NetFirewallProfile'
+      - '-Enabled False'
+  condition: 1 of selection_*
+level: high
+---
+title: Sticky Keys Backdoor
+id: sigma-023
+status: stable
+description: sethc.exe replaced with cmd.exe (sticky keys backdoor)
+tags:
+  - attack.persistence
+  - attack.t1546.008
+logsource: {category: file_change, product: windows}
+detection:
+  selection:
+    TargetFilename|endswith:
+      - '\sethc.exe'
+      - '\utilman.exe'
+  condition: selection
+level: critical
+---
+title: Kerberoasting Attack
+id: sigma-024
+status: stable
+description: Kerberos TGS request for service ticket (Kerberoasting)
+tags:
+  - attack.credential_access
+  - attack.t1558.003
+logsource: {product: windows, service: security}
+detection:
+  selection:
+    EventID: 4769
+    TicketOptions: '0x40810000'
+    TicketEncryptionType: '0x17'
+  condition: selection
+level: high
+---
+title: DCSync Attack Detection
+id: sigma-025
+status: stable
+description: DCSync privilege used to replicate domain credentials
+tags:
+  - attack.credential_access
+  - attack.t1003.006
+logsource: {product: windows, service: security}
+detection:
+  selection:
+    EventID: 4662
+    Properties|contains:
+      - '1131f6aa-9c07-11d1-f79f-00c04fc2dcd2'
+      - '1131f6ad-9c07-11d1-f79f-00c04fc2dcd2'
+  condition: selection
+level: critical
+---
+title: Log Clearing
+id: sigma-026
+status: stable
+description: Windows event log cleared to cover tracks
+tags:
+  - attack.defense_evasion
+  - attack.t1070.001
+logsource: {product: windows, service: security}
+detection:
+  selection:
+    EventID:
+      - 1102
+      - 104
+  condition: selection
+level: high
+---
+title: New Local Admin Account Created
+id: sigma-027
+status: stable
+description: New local administrator account created
+tags:
+  - attack.persistence
+  - attack.t1136.001
+logsource: {product: windows, service: security}
+detection:
+  selection:
+    EventID: 4720
+  filter_service:
+    SubjectUserName|endswith: '$'
+  condition: selection and not filter_service
+level: high
+---
+title: Lateral Movement via RDP
+id: sigma-028
+status: stable
+description: RDP lateral movement detected
+tags:
+  - attack.lateral_movement
+  - attack.t1021.001
+logsource: {product: windows, service: security}
+detection:
+  selection:
+    EventID: 4624
+    LogonType: 10
+  filter_local:
+    IpAddress: '127.0.0.1'
+  condition: selection and not filter_local
+level: medium
+---
+title: Excessive Failed Logons (Brute Force)
+id: sigma-029
+status: stable
+description: Multiple failed logon attempts — brute force attack
+tags:
+  - attack.credential_access
+  - attack.t1110
+logsource: {product: windows, service: security}
+detection:
+  selection:
+    EventID: 4625
+    LogonType:
+      - 3
+      - 10
+  condition: selection
+level: medium
+---
+title: UAC Bypass via Event Viewer
+id: sigma-030
+status: stable
+description: UAC bypass using eventvwr.exe and registry hijacking
+tags:
+  - attack.privilege_escalation
+  - attack.t1548.002
+logsource: {category: process_creation, product: windows}
+detection:
+  selection:
+    ParentImage|endswith: '\eventvwr.exe'
+    Image|endswith:
+      - '\cmd.exe'
+      - '\powershell.exe'
+  condition: selection
+level: high

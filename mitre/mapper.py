@@ -27,7 +27,15 @@ class MitreMapper:
     def _load(self, path: Path):
         try:
             with open(path, "r") as f:
-                self._db = json.load(f)
+                raw = json.load(f)
+            # Support both list format (from resource_downloader) and dict format (legacy)
+            if isinstance(raw, list):
+                self._db = {t["id"]: t for t in raw if isinstance(t, dict) and "id" in t}
+            elif isinstance(raw, dict):
+                # Legacy dict keyed by technique ID
+                self._db = raw
+            else:
+                self._db = {}
             logger.info(f"MITRE DB loaded: {len(self._db)} techniques from {path}")
         except FileNotFoundError:
             logger.warning(f"MITRE DB not found at {path} — using empty DB")
@@ -64,6 +72,10 @@ class MitreMapper:
 
     def get_all_techniques(self) -> dict:
         return self._db.copy()
+
+    def get_all_ids(self) -> list:
+        """Return list of all technique IDs in the database."""
+        return list(self._db.keys())
 
     def get_coverage_summary(self, alerts: list) -> dict:
         """Summarize MITRE technique coverage across a list of alerts."""

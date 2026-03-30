@@ -1,0 +1,14 @@
+{
+  "backend": "torch",
+  "python_version": "3.13.11",
+  "window_size": 10,
+  "n_features": 41,
+  "threshold": 0.3,
+  "trained_at": "2026-03-28T20:26:07.840200",
+  "test_accuracy": 0.8641164462589864,
+  "test_auc": 0.9999556206452758,
+  "best_f1": 0.9395237198795181,
+  "attack_rate_train": 0.46541720628738403,
+  "dataset": "NSL-KDD (GitHub mirror)",
+  "model_path": "models/lstm_detector.pt"
+}

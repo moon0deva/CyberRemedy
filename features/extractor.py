@@ -8,7 +8,7 @@ import math
 import time
 import logging
 from collections import defaultdict, deque
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 logger = logging.getLogger("cyberremedy.features")
 
@@ -42,6 +42,22 @@ def shannon_entropy(values: List) -> float:
     return round(entropy, 4)
 
 
+# ─── BYTE-LEVEL PAYLOAD ENTROPY ──────────────────────────────────────────────
+
+def _payload_byte_entropy(raw_payloads: List[bytes], payload_sizes: List[int]) -> float:
+    """
+    Compute Shannon entropy over raw payload bytes.
+    Falls back to size-bucket entropy when raw bytes are unavailable.
+    High entropy (>7.0) indicates encryption/compression/tunneling.
+    """
+    # Prefer byte-level entropy (requires _raw_payload in packet dict)
+    combined = b"".join(raw_payloads)
+    if len(combined) >= 64:
+        return round(shannon_entropy(list(combined)), 4)
+    # Fallback: size-bucket entropy (coarser but always available)
+    return shannon_entropy([min(p // 100, 9) for p in payload_sizes])
+
+
 # ─── FLOW RECORD ──────────────────────────────────────────────────────────────
 
 class FlowRecord:
@@ -63,7 +79,9 @@ class FlowRecord:
         self.dst_ports_seen: set = {first_pkt["dst_port"]}
         self.src_ips_seen: set = {first_pkt["src_ip"]}
         self.ttls_seen: List[int] = [first_pkt.get("ttl", 64)]
-        self.payload_sizes: List[int] = [first_pkt.get("payload_len", 0)]
+        self.payload_sizes: List[int]  = [first_pkt.get("payload_len", 0)]
+        self.raw_payloads:  List[bytes] = [first_pkt.get("_raw_payload", b"")]
+        self._conn_start:   float       = first_pkt["raw_ts"]
 
     def add_packet(self, pkt: dict):
         now = pkt["raw_ts"]
@@ -76,6 +94,9 @@ class FlowRecord:
         self.src_ips_seen.add(pkt["src_ip"])
         self.ttls_seen.append(pkt.get("ttl", 64))
         self.payload_sizes.append(pkt.get("payload_len", 0))
+        raw = pkt.get("_raw_payload", b"")
+        if raw:
+            self.raw_payloads.append(raw)
 
     def to_feature_vector(self) -> dict:
         pkts = self.packet_lengths
@@ -117,8 +138,8 @@ class FlowRecord:
             "dst_port_entropy": shannon_entropy(list(self.dst_ports_seen)),
             "flag_entropy": shannon_entropy(self.flags_seen),
             "ttl_entropy": shannon_entropy(self.ttls_seen),
-            "payload_entropy": shannon_entropy(
-                [min(p // 100, 9) for p in self.payload_sizes]
+            "payload_entropy": _payload_byte_entropy(
+                self.raw_payloads, self.payload_sizes
             ),
 
             # Protocol
@@ -127,6 +148,9 @@ class FlowRecord:
             "has_fin": int("F" in "".join(self.flags_seen)),
             "has_rst": int("R" in "".join(self.flags_seen)),
             "has_null": int(all(f == "" for f in self.flags_seen)),
+
+            # Connection behaviour
+            "connection_rate": round(len(pkts) / max(duration, 1.0), 4),
 
             # Identity
             "src_ip": self.src_ip,

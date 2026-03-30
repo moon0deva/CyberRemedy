@@ -387,19 +387,95 @@ class SigmaEngine:
             return
         try:
             with open(builtin) as f:
-                data = _yaml.safe_load(f) or {}
-            for rule in data.get("rules", []):
-                self._rules[rule["id"]] = {
-                    "id": rule["id"],
-                    "name": rule["title"],
-                    "title": rule["title"],
-                    "severity": rule.get("severity", "MEDIUM"),
-                    "mitre_id": rule.get("mitre_id", ""),
-                    "category": rule.get("category", "network"),
-                    "description": rule.get("description", ""),
-                    "source": "builtin",
-                    "hits": 0,
-                }
-            logger.info(f"Sigma: loaded {len(data.get('rules',[]))} built-in rules")
+                text = f.read()
+            # Try legacy single-doc format first (rules: [...])
+            loaded = 0
+            try:
+                data = _yaml.safe_load(text) or {}
+                for rule in data.get("rules", []):
+                    rid = rule.get("id","")
+                    if rid:
+                        self._rules[rid] = {
+                            "id": rid, "name": rule.get("title",""), "title": rule.get("title",""),
+                            "severity": rule.get("severity","MEDIUM"), "mitre_id": rule.get("mitre_id",""),
+                            "category": rule.get("category","network"), "description": rule.get("description",""),
+                            "source": "builtin", "hits": 0,
+                        }
+                        loaded += 1
+            except _yaml.YAMLError:
+                pass
+            # Also try multi-document format (--- separated, each is a Sigma rule dict)
+            for doc in _yaml.safe_load_all(text):
+                if not isinstance(doc, dict) or "title" not in doc:
+                    continue
+                rid = doc.get("id","")
+                title = doc.get("title","")
+                if not rid and title:
+                    import hashlib
+                    rid = "builtin-" + hashlib.md5(title.encode()).hexdigest()[:8]
+                if rid and rid not in self._rules:
+                    import re as _re
+                    tags = doc.get("tags",[])
+                    mitre = next(("T"+m for t in tags for m in _re.findall(r"attack\.t(\d+(?:\.\d+)?)", str(t), _re.I)), "")
+                    level = doc.get("level","medium").upper()
+                    sev = {"CRITICAL":"CRITICAL","HIGH":"HIGH","MEDIUM":"MEDIUM","LOW":"LOW","INFORMATIONAL":"LOW"}.get(level,"MEDIUM")
+                    self._rules[rid] = {
+                        "id": rid, "name": title, "title": title, "severity": sev,
+                        "mitre_id": mitre, "category": "network",
+                        "description": doc.get("description",""), "source": "builtin", "hits": 0,
+                    }
+                    loaded += 1
+            logger.info(f"Sigma: loaded {loaded} built-in rules")
+            self.rule_count = len(self._rules)
         except Exception as e:
             logger.warning(f"Sigma builtin load error: {e}")
+        # Also load community_rules.yml if present
+        self._load_community_rules()
+
+    def _load_community_rules(self):
+        """Load community Sigma rules from data/sigma_rules/community_rules.yml (Apache 2.0)."""
+        import re as _re
+        from pathlib import Path as _Path
+        community = _Path(__file__).parent.parent / "data" / "sigma_rules" / "community_rules.yml"
+        if not community.exists():
+            return
+        try:
+            text = community.read_text(errors="replace")
+            # Split on YAML document separator
+            docs = [d.strip() for d in _re.split(r"^---\s*$", text, flags=_re.MULTILINE) if d.strip()]
+            loaded = 0
+            for i, doc in enumerate(docs):
+                try:
+                    if "title:" not in doc:
+                        continue
+                    # Extract fields via regex (avoid yaml dependency issues with complex docs)
+                    title_m = _re.search(r"^title:\s*(.+)$", doc, _re.MULTILINE)
+                    id_m    = _re.search(r"^id:\s*(.+)$", doc, _re.MULTILINE)
+                    level_m = _re.search(r"^level:\s*(\w+)$", doc, _re.MULTILINE)
+                    desc_m  = _re.search(r"^description:\s*(.+)$", doc, _re.MULTILINE)
+                    tags    = _re.findall(r"attack\.t(\d+(?:\.\d+)?)", doc, _re.IGNORECASE)
+
+                    title   = title_m.group(1).strip() if title_m else f"sigma-comm-{i}"
+                    rule_id = id_m.group(1).strip()    if id_m    else f"comm-{i}"
+                    level   = (level_m.group(1) or "medium").upper() if level_m else "MEDIUM"
+                    desc    = desc_m.group(1).strip()  if desc_m  else ""
+                    mitre   = f"T{tags[0]}" if tags else ""
+
+                    sev_map = {"CRITICAL":"CRITICAL","HIGH":"HIGH","MEDIUM":"MEDIUM","LOW":"LOW",
+                               "INFORMATIONAL":"LOW"}
+                    severity = sev_map.get(level, "MEDIUM")
+
+                    if rule_id not in self._rules:
+                        self._rules[rule_id] = {
+                            "id": rule_id, "name": title, "title": title,
+                            "severity": severity, "mitre_id": mitre,
+                            "category": "network", "description": desc,
+                            "source": "community", "hits": 0,
+                        }
+                        loaded += 1
+                except Exception:
+                    continue
+            logger.info(f"Sigma: loaded {loaded} community rules from community_rules.yml")
+            self.rule_count = len(self._rules)
+        except Exception as e:
+            logger.warning(f"Sigma community load error: {e}")

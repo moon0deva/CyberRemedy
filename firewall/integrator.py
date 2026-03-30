@@ -1,4 +1,4 @@
-"""CyberRemedy v1.0 — Firewall Integrator. Auto-detects iptables/ufw/nftables/windows."""
+"""CyberRemedy v1.2 — Firewall Integrator. Auto-detects iptables/ufw/nftables/windows."""
 import os, json, platform, subprocess, threading, logging as _logging
 from datetime import datetime
 from pathlib import Path
@@ -18,6 +18,14 @@ def _run(cmd, dry=False):
 def _which(c):
     import shutil; return shutil.which(c) is not None
 
+def _ipt_bin(ip: str) -> str:
+    """Return 'ip6tables' for IPv6, 'iptables' for IPv4."""
+    try:
+        import ipaddress
+        return "ip6tables" if ipaddress.ip_address(ip).version == 6 else "iptables"
+    except ValueError:
+        return "iptables"
+
 def detect_backend():
     if platform.system()=="Windows": return "windows"
     if _which("ufw"):
@@ -33,8 +41,8 @@ class _IPT:
         _run(["iptables","-N",self.chain],dry)
         ok,_=_run(["iptables","-C","INPUT","-j",self.chain],False)
         if not ok: _run(["iptables","-I","INPUT","-j",self.chain],dry)
-    def block(self,ip):   return _run(["iptables","-I",self.chain,"-s",ip,"-j","DROP"],self.dry)
-    def unblock(self,ip): return _run(["iptables","-D",self.chain,"-s",ip,"-j","DROP"],self.dry)
+    def block(self,ip):   return _run([_ipt_bin(ip),"-I",self.chain,"-s",ip,"-j","DROP"],self.dry)
+    def unblock(self,ip): return _run([_ipt_bin(ip),"-D",self.chain,"-s",ip,"-j","DROP"],self.dry)
     def rules(self):
         ok,out=_run(["iptables","-L",self.chain,"-n","--line-numbers"],False)
         if not ok: return []

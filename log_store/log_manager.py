@@ -1,4 +1,4 @@
-"""CyberRemedy v1.0 — Log Manager. Rotating JSONL, 1-year retention, CSV export."""
+"""CyberRemedy v1.2 — Log Manager. Rotating JSONL, 1-year retention, CSV export."""
 import os, json, gzip, shutil, threading, io, csv
 from datetime import datetime, timedelta
 from pathlib import Path

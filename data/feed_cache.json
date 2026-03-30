@@ -1,0 +1,68 @@
+{
+  "FeodoTracker": {
+    "ok": true,
+    "added": 0,
+    "ts": 1773788033.7985141,
+    "error": null
+  },
+  "URLhaus": {
+    "ok": true,
+    "added": 2000,
+    "ts": 1773788033.7985141,
+    "error": null
+  },
+  "ThreatFox-IPs": {
+    "ok": true,
+    "added": 518,
+    "ts": 1773788033.7985141,
+    "error": null
+  },
+  "ThreatFox-Domains": {
+    "ok": false,
+    "added": 0,
+    "ts": 1773788033.7985141,
+    "error": "HTTP Error 404: Not Found"
+  },
+  "MalwareBazaar": {
+    "ok": true,
+    "added": 687,
+    "ts": 1773788033.7985141,
+    "error": null
+  },
+  "ET-Compromised": {
+    "ok": true,
+    "added": 668,
+    "ts": 1773788033.7985141,
+    "error": null
+  },
+  "TorExitNodes": {
+    "ok": true,
+    "added": 1161,
+    "ts": 1773788033.7985141,
+    "error": null
+  },
+  "BinaryDefense": {
+    "ok": true,
+    "added": 2000,
+    "ts": 1773788033.7985141,
+    "error": null
+  },
+  "Botvrij-Domains": {
+    "ok": true,
+    "added": 0,
+    "ts": 1773788033.7985141,
+    "error": null
+  },
+  "OpenPhish": {
+    "ok": true,
+    "added": 300,
+    "ts": 1773788033.7985141,
+    "error": null
+  },
+  "PhishTank-Domains": {
+    "ok": false,
+    "added": 0,
+    "ts": 1773788033.7985141,
+    "error": "HTTP Error 404: Not Found"
+  }
+}

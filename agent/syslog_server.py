@@ -1,5 +1,5 @@
 """
-CyberRemedy v1.0 — Syslog Ingestion Server
+CyberRemedy v1.2 — Syslog Ingestion Server
 Listens on UDP/TCP 514 (or custom port) for RFC 3164/5424 syslog.
 Also accepts Windows Event Log in JSON format from the agent.
 No root needed if port > 1024 (default: 5514).

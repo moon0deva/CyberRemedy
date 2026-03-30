@@ -1,4 +1,4 @@
-"""CyberRemedy v1.0 — Asset Discovery. ARP scan, port scan, inventory, rogue alerts."""
+"""CyberRemedy v1.2 — Asset Discovery. ARP scan, port scan, inventory, rogue alerts."""
 import re, json, socket, threading, subprocess, ipaddress, logging as _logging
 from datetime import datetime
 from pathlib import Path
@@ -694,6 +694,14 @@ class AssetInventory:
                 self._devices[ip]["label"] = label
                 self.labels[ip] = label
                 self._save()
+
+    def clear(self):
+        """Clear all discovered devices — call when switching networks."""
+        with self._lock:
+            self._devices.clear()
+            self._known_macs.clear()
+            self.labels.clear()
+        self._save()
 
     def stats(self):
         with self._lock: devs = list(self._devices.values())

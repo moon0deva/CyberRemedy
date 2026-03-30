@@ -208,6 +208,157 @@ def rule_suspicious_encrypted(flow: dict, cfg: dict) -> Optional[dict]:
     return None
 
 
+def rule_dns_leak(flow: dict, cfg: dict) -> Optional[dict]:
+    """
+    Detect DNS leak / resolver bypass.
+    A DNS query going directly to a well-known public resolver instead of the
+    LAN gateway indicates a VPN misconfiguration, split-tunnel leak, or
+    deliberate policy bypass (T1071 — Application Layer Protocol).
+
+    Configure expected_dns_servers in detection.signature to match your network.
+    Default assumes the LAN gateway handles DNS (common home/SMB layout).
+    """
+    EXPECTED_RESOLVERS: set = set(cfg.get("expected_dns_servers", []))
+    KNOWN_PUBLIC_DNS: set = {
+        "8.8.8.8", "8.8.4.4",          # Google
+        "1.1.1.1", "1.0.0.1",          # Cloudflare
+        "9.9.9.9", "149.112.112.112",   # Quad9
+        "208.67.222.222", "208.67.220.220",  # OpenDNS
+        "64.6.64.6", "64.6.65.6",      # Verisign
+        "77.88.8.8", "77.88.8.1",      # Yandex
+    }
+
+    if flow.get("protocol") != "DNS":
+        return None
+    if flow.get("dst_port") != 53:
+        return None
+
+    dst = flow.get("dst_ip", "")
+    src = flow.get("src_ip", "")
+    if not dst:
+        return None
+
+    # Skip if destination is an expected/configured resolver
+    if EXPECTED_RESOLVERS and dst in EXPECTED_RESOLVERS:
+        return None
+
+    def _is_private(ip: str) -> bool:
+        return (ip.startswith("192.168.") or ip.startswith("10.")
+                or ip.startswith("172.") or ip.startswith("127."))
+
+    # Case 1: Query to a well-known public resolver — definite bypass
+    if dst in KNOWN_PUBLIC_DNS:
+        return _make_alert(
+            flow, "DNS Leak / Resolver Bypass", "T1071", "MEDIUM", 0.82,
+            f"DNS query from {src} sent directly to public resolver {dst} "
+            f"— bypasses LAN DNS (VPN misconfiguration or deliberate bypass)"
+        )
+
+    # Case 2: Query going to any external (non-LAN) IP on port 53 — possible custom resolver
+    if not _is_private(dst):
+        return _make_alert(
+            flow, "DNS Leak / Unknown Resolver", "T1071", "LOW", 0.60,
+            f"DNS query from {src} to unexpected external resolver {dst}"
+        )
+
+    return None
+
+
+def rule_mac_randomised(flow: dict, cfg: dict) -> Optional[dict]:
+    """
+    Detect Android/iOS MAC randomisation.
+
+    Android 10+ and iOS 14+ assign a per-network randomised MAC by default.
+    A randomised MAC has the locally-administered bit set — the second hex
+    digit of the first octet is 2, 6, A, or E  (binary x010 in bit 1).
+
+    Examples of randomised MACs:  02:xx, 06:xx, 0A:xx, 0E:xx,
+                                   12:xx, 16:xx, 1A:xx, 1E:xx, ...
+
+    This rule fires on NEW DEVICE alerts that carry a randomised MAC so the
+    analyst knows the OUI vendor lookup will be unreliable and the device is
+    likely a modern mobile phone or tablet.
+
+    The alert is LOW severity — it is informational, not an attack — but it
+    enriches the device registry entry so downstream rules have context.
+    """
+    mac = flow.get("mac", "")
+    if not mac or len(mac) < 2:
+        return None
+
+    # Only fire on new-device type events that carry a mac field
+    if flow.get("type") not in ("New WiFi Device", "new_device", "arp", "beacon", "mdns", "ssdp"):
+        return None
+
+    # Check locally-administered bit (bit 1 of first octet)
+    try:
+        first_octet = int(mac.replace(":", "").replace("-", "")[:2], 16)
+        is_random = bool(first_octet & 0x02)   # bit 1 set = locally administered
+    except ValueError:
+        return None
+
+    if not is_random:
+        return None
+
+    src = flow.get("src_ip", "") or flow.get("ip", "")
+    return _make_alert(
+        flow, "MAC Randomisation Detected", "T1040", "LOW", 0.90,
+        f"Device {src or 'unknown IP'} uses a randomised MAC ({mac}) — "
+        f"likely Android 10+ or iOS 14+ mobile device. "
+        f"OUI vendor lookup unreliable. Use IP + mDNS/SSDP hostname for identification."
+    )
+
+
+def rule_dot_leak(flow: dict, cfg: dict) -> Optional[dict]:
+    """
+    Detect DNS-over-TLS (DoT) bypassing the LAN resolver — Android 9+ specific.
+
+    Android 9+ introduced Private DNS (DNS-over-TLS) on port 853.
+    When a device sends DoT directly to 8.8.8.8:853 or 1.1.1.1:853 it
+    bypasses the LAN gateway resolver entirely — plain port-53 DNS leak
+    detection (rule_dns_leak) misses this completely.
+
+    This rule catches TCP/TLS flows to port 853 going to external IPs.
+    Combined with rule_dns_leak it gives full coverage of DNS bypass
+    for both Android 9 (DoT) and older devices (plain UDP 53).
+    """
+    if flow.get("dst_port") != 853:
+        return None
+    if flow.get("protocol") not in ("TCP", "TLS", "OTHER"):
+        return None
+
+    dst = flow.get("dst_ip", "")
+    src = flow.get("src_ip", "")
+    if not dst:
+        return None
+
+    def _is_private(ip: str) -> bool:
+        return any(ip.startswith(p) for p in ("192.168.", "10.", "172.", "127."))
+
+    if _is_private(dst):
+        return None   # DoT to a LAN resolver is fine
+
+    EXPECTED: set = set(cfg.get("expected_dns_servers", []))
+    if EXPECTED and dst in EXPECTED:
+        return None
+
+    KNOWN_DOT = {
+        "8.8.8.8", "8.8.4.4",           # Google
+        "1.1.1.1", "1.0.0.1",           # Cloudflare
+        "9.9.9.9", "149.112.112.112",    # Quad9
+        "208.67.222.222",                # OpenDNS
+    }
+    severity   = "MEDIUM" if dst in KNOWN_DOT else "LOW"
+    confidence = 0.85     if dst in KNOWN_DOT else 0.65
+
+    return _make_alert(
+        flow, "DNS-over-TLS Leak (Android Private DNS)", "T1071", severity, confidence,
+        f"DoT connection from {src} to {dst}:853 bypasses LAN resolver — "
+        f"Android Private DNS or iOS DoT. Plain UDP-53 DNS monitoring will "
+        f"NOT see queries from this device."
+    )
+
+
 # ─── SIGNATURE ENGINE ─────────────────────────────────────────────────────────
 
 RULES = [
@@ -216,6 +367,9 @@ RULES = [
     rule_brute_force,
     rule_c2_beaconing,
     rule_dns_tunneling,
+    rule_dns_leak,              # UDP/53 resolver bypass (all devices)
+    rule_dot_leak,              # TCP/853 DoT bypass (Android 9+ / iOS 14+)
+    rule_mac_randomised,        # Android 10+ / iOS 14+ randomised MAC detection
     rule_lateral_movement,
     rule_large_outbound,
     rule_suspicious_encrypted,

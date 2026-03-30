@@ -103,7 +103,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 </div>
 
 <div class="footer">
-  CyberRemedy v2.1 &nbsp;|&nbsp; Generated {generated_at} &nbsp;|&nbsp;
+  CyberRemedy v1.2 &nbsp;|&nbsp; Generated {generated_at} &nbsp;|&nbsp;
   Offline Mode: Active &nbsp;|&nbsp; All rights reserved
 </div>
 </body>

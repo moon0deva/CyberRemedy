@@ -1,5 +1,5 @@
 """
-CyberRemedy v1.0 — Report Scheduler + Email Alerting
+CyberRemedy v1.2 — Report Scheduler + Email Alerting
 Sends scheduled HTML reports via SMTP and real-time alerts via email/Slack/Discord/Telegram.
 """
 import json, smtplib, threading, time, logging as _logging
