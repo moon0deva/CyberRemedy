@@ -1,4 +1,4 @@
-# ─── CyberRemedy Requirements v3.5 ────────────────────────────────────────────
+# ─── CyberRemedy Requirements────────────────────────────────────────────
 # Python compatibility: 3.9 – 3.13+
 #
 # Quick-start by Python version:
@@ -82,17 +82,17 @@ tinydb>=4.8.0
 
 # Compliance & vulnerability
 cvss>=2.6
-packaging>=24.0
+packaging
 
 # Data lake / storage
 pyarrow>=16.0
-zstd>=1.5
+zstd
 
 # GeoIP (optional)
-maxminddb-reader>=1.5.0
+maxminddb
 
 # Network interface detection (optional)
-netifaces>=0.11.0
+netifaces
 
 # ── TLS/HTTPS Interception ─────────────────────────────────────────────────────
 mitmproxy>=10.0.0
