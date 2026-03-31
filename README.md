@@ -74,8 +74,6 @@ destination d_cr { tcp("SERVER_IP" port(5514)); };
 log { source(s_src); destination(d_cr); };
 <pre><code>sudo systemctl restart syslog-ng</code></pre>
 
-# logger
-<pre><code> logger -n SERVER_IP -P 5514 -T "Test from $(hostname)"</code></pre>
 
 # What CyberRemedy Does
 
